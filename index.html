@@ -926,7 +926,7 @@ function resetAll(){
 // ── API Key management ────────────────────────────────────────────────────
 const KEY_LS = 'sk_anthropic_key';
 
-function getKey() { return localStorage.getItem(KEY_LS) || ''; }
+function getKey() { return (localStorage.getItem(KEY_LS) || '').replace(/[^\x20-\x7E]/g, '').trim(); }
 
 function initKeyBanner() {
   const key = getKey();
@@ -934,7 +934,7 @@ function initKeyBanner() {
 }
 
 function saveKey() {
-  const val = document.getElementById('key-input').value.trim();
+  const val = document.getElementById('key-input').value.replace(/[^\x20-\x7E]/g, '').trim();
   if (!val.startsWith('sk-ant')) {
     document.getElementById('key-input').style.borderColor = 'var(--red)';
     setTimeout(() => document.getElementById('key-input').style.borderColor = '', 1200);
