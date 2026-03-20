@@ -721,7 +721,7 @@ Return ONLY valid JSON (no markdown, no preamble):
 
   const apiKey = getKey();
   if (!apiKey) { throw new Error('No API key set. Enter your Anthropic API key at the top of the page.'); }
-  const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1800,messages:[{role:'user',content:prompt}]})});
+  const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1800,messages:[{role:'user',content:prompt}]})});
   if(!res.ok) throw new Error(`Claude API: ${res.status}`);
   const data=await res.json();
   const txt=data.content?.filter(c=>c.type==='text').map(c=>c.text).join('');
@@ -935,7 +935,7 @@ function initKeyBanner() {
 
 function saveKey() {
   const val = document.getElementById('key-input').value.replace(/[^\x20-\x7E]/g, '').trim();
-  if (!val.startsWith('sk-ant')) {
+  if (!val.startsWith('sk-')) {
     document.getElementById('key-input').style.borderColor = 'var(--red)';
     setTimeout(() => document.getElementById('key-input').style.borderColor = '', 1200);
     return;
