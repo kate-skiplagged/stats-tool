@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skiplagged — Statistical Analysis Engine</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;600;700;800&display=swap');
+:root{--bg:#0a0a0f;--surface:#111118;--surface2:#1a1a24;--surface3:#22223a;--border:rgba(255,255,255,0.07);--bb:rgba(255,255,255,0.13);--accent:#6c63ff;--teal:#00d4a8;--red:#ff6b6b;--amber:#f5a623;--text:#f0eff8;--muted:#7a7896;--dim:#4a4862;--mono:'DM Mono',monospace;--sans:'Syne',sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(108,99,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(108,99,255,0.025) 1px,transparent 1px);background-size:48px 48px;pointer-events:none;z-index:0;}
+.app{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:48px 24px 80px;}
+
+/* ── Header ── */
+.logo-row{display:flex;align-items:center;gap:12px;margin-bottom:40px;}
+.logo-mark{width:36px;height:36px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:white;flex-shrink:0;}
+.logo-text{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.1em;}
+h1{font-size:clamp(28px,5vw,46px);font-weight:800;line-height:1.05;letter-spacing:-.03em;margin-bottom:12px;}
+h1 em{font-style:normal;color:var(--accent);}
+.hero-sub{font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;max-width:540px;}
+
+/* ── Cards & sections ── */
+.section{margin-bottom:36px;}
+.section-label{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--dim);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.section-num{width:20px;height:20px;border:1px solid var(--bb);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--accent);}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 28px;position:relative;overflow:hidden;}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.35;}
+.hidden{display:none!important;}
+
+/* ── Upload ── */
+.drop-zone{border:1.5px dashed var(--bb);border-radius:10px;padding:44px 32px;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface2);}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--accent);background:rgba(108,99,255,0.07);}
+.drop-icon{width:44px;height:44px;margin:0 auto 14px;background:rgba(108,99,255,0.14);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:20px;}
+.drop-title{font-size:15px;font-weight:600;margin-bottom:5px;}
+.drop-sub{font-size:12px;color:var(--muted);font-family:var(--mono);}
+textarea{width:100%;background:var(--surface2);border:1px solid var(--bb);border-radius:8px;padding:12px 14px;color:var(--text);font-family:var(--mono);font-size:12px;resize:vertical;min-height:90px;outline:none;transition:border .15s;}
+textarea:focus{border-color:var(--accent);}
+.schema-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-top:14px;}
+.schema-item{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:9px 12px;}
+.sc-col{font-family:var(--mono);font-size:11px;color:var(--teal);margin-bottom:2px;}
+.sc-type{font-size:10px;color:var(--dim);}
+.sc-sample{font-size:10px;color:var(--muted);margin-top:2px;font-family:var(--mono);}
+.file-chip{display:inline-flex;align-items:center;gap:7px;background:rgba(0,212,168,.1);border:1px solid rgba(0,212,168,.2);border-radius:6px;padding:6px 12px;font-family:var(--mono);font-size:12px;color:var(--teal);margin-top:12px;}
+
+/* ── Context ── */
+.q-block{margin-bottom:18px;}
+.q-label{font-size:13px;font-weight:600;margin-bottom:8px;}
+.q-opts{display:flex;flex-wrap:wrap;gap:7px;}
+.q-opt{padding:6px 14px;border:1px solid var(--bb);border-radius:6px;font-size:12px;font-family:var(--mono);color:var(--muted);cursor:pointer;transition:all .15s;background:var(--surface2);}
+.q-opt:hover{border-color:var(--accent);color:var(--text);}
+.q-opt.on{border-color:var(--accent);background:rgba(108,99,255,.15);color:var(--text);}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 22px;border-radius:8px;font-family:var(--sans);font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;border:none;}
+.btn-p{background:var(--accent);color:#fff;}.btn-p:hover{background:#5a52e0;transform:translateY(-1px);}
+.btn-p:disabled{opacity:.35;cursor:not-allowed;transform:none;}
+.btn-g{background:transparent;color:var(--muted);border:1px solid var(--bb);}.btn-g:hover{color:var(--text);background:var(--surface2);}
+
+/* ── Running ── */
+.pulse{width:56px;height:56px;border-radius:50%;border:2px solid var(--accent);margin:0 auto 20px;position:relative;animation:pr 1.5s ease-in-out infinite;}
+.pulse::after{content:'';position:absolute;inset:8px;border-radius:50%;background:var(--accent);opacity:.3;animation:pi 1.5s ease-in-out infinite;}
+@keyframes pr{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.1);opacity:.7}}
+@keyframes pi{0%,100%{transform:scale(1)}50%{transform:scale(1.2)}}
+.prog-list{display:flex;flex-direction:column;gap:5px;margin-top:20px;text-align:left;}
+.prog-item{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11px;color:var(--dim);padding:7px 11px;border-radius:6px;transition:all .3s;}
+.prog-item.act{color:var(--accent);background:rgba(108,99,255,.08);}
+.prog-item.done{color:var(--teal);}
+.prog-dot{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0;}
+.prog-item.act .prog-dot{animation:blink .8s ease-in-out infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+
+/* ── Results ── */
+.r-header{margin-bottom:28px;}
+.r-headline{font-size:22px;font-weight:700;margin-bottom:8px;line-height:1.25;}
+.r-meta{font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;}
+.r-meta span{display:flex;align-items:center;gap:5px;}
+.r-meta span::before{content:'·';color:var(--dim);}
+.r-meta span:first-child::before{display:none;}
+
+.mod-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:18px;overflow:hidden;}
+.mod-head{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:14px;}
+.mod-ic{width:30px;height:30px;background:rgba(108,99,255,.14);border:1px solid rgba(108,99,255,.28);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--accent);flex-shrink:0;font-family:var(--mono);font-weight:500;}
+.mod-title{font-size:15px;font-weight:700;margin-bottom:3px;}
+.mod-subtitle{font-size:12px;color:var(--muted);}
+.mod-body{padding:20px 22px;}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:20px;}
+.stat-c{background:var(--surface2);border-radius:8px;padding:12px 14px;border:1px solid var(--border);}
+.stat-lbl{font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;}
+.stat-val{font-size:20px;font-weight:700;line-height:1;}
+.stat-val.pos{color:var(--teal);}
+.stat-val.neg{color:var(--red);}
+.stat-val.neu{color:var(--accent);}
+.stat-val.warn{color:var(--amber);}
+.plain-box{background:linear-gradient(135deg,rgba(108,99,255,.08),rgba(0,212,168,.05));border:1px solid rgba(108,99,255,.18);border-radius:9px;padding:18px 20px;margin-bottom:18px;}
+.plain-lbl{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--accent);text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:7px;}
+.plain-lbl::before{content:'';width:14px;height:1px;background:var(--accent);}
+.plain-txt{font-size:14px;line-height:1.75;color:var(--text);}
+.action-box{background:rgba(0,212,168,.07);border:1px solid rgba(0,212,168,.18);border-radius:9px;padding:16px 20px;}
+.act-lbl{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--teal);text-transform:uppercase;margin-bottom:7px;}
+.act-txt{font-size:13px;line-height:1.75;color:var(--text);}
+.chart-wrap{position:relative;height:210px;margin-bottom:18px;}
+.driver-row{display:grid;grid-template-columns:150px 1fr 70px 80px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;}
+.driver-row:last-child{border-bottom:none;}
+.d-lbl{color:var(--muted);font-family:var(--mono);font-size:11px;}
+.bar-w{height:5px;background:var(--surface2);border-radius:3px;overflow:hidden;}
+.bar-f{height:100%;border-radius:3px;}
+.d-val{font-family:var(--mono);font-weight:500;text-align:right;font-size:12px;}
+.d-sig{font-family:var(--mono);font-size:10px;text-align:right;color:var(--dim);}
+.tech-row{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:14px;padding-top:14px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:10px;align-items:center;}
+.tech-tag{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:9px;}
+.sig-pill{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:8px;font-size:9px;font-family:var(--mono);font-weight:500;}
+.sig-yes{background:rgba(0,212,168,.12);color:var(--teal);border:1px solid rgba(0,212,168,.2);}
+.sig-no{background:rgba(122,120,150,.1);color:var(--dim);border:1px solid var(--border);}
+.sig-warn{background:rgba(245,166,35,.1);color:var(--amber);border:1px solid rgba(245,166,35,.2);}
+
+/* ── Test panel ── */
+.test-panel{background:var(--surface2);border:1px solid var(--bb);border-radius:10px;padding:16px 20px;margin-bottom:18px;}
+.test-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.test-title{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.1em;}
+.test-row{display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:11px;}
+.test-row:last-child{border-bottom:none;}
+.test-name{color:var(--muted);width:200px;flex-shrink:0;}
+.test-py{color:var(--dim);flex:1;}
+.test-js{flex:1;}
+.test-ok{color:var(--teal);}
+.test-fail{color:var(--red);}
+.test-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;padding:2px 8px;border-radius:6px;}
+.badge-ok{background:rgba(0,212,168,.12);color:var(--teal);}
+.badge-fail{background:rgba(255,107,107,.12);color:var(--red);}
+
+@media(max-width:600px){.stats-row{grid-template-columns:1fr 1fr;}.driver-row{grid-template-columns:110px 1fr 55px;}.d-sig{display:none;}.chart-wrap{height:180px;}}
+</style>
+</head>
+<body>
+<div class="app">
+
+<div class="logo-row">
+  <div class="logo-mark">S</div>
+  <div class="logo-text">SKIPLAGGED · STATISTICAL ANALYSIS ENGINE · v2.0</div>
+</div>
+
+<h1>Find what's actually<br><em>driving your numbers</em></h1>
+<p class="hero-sub" style="margin-bottom:48px">Upload a CSV. The engine runs local statistical models — trend, seasonality, correlations, OLS regression, anomaly detection — then asks Claude to explain what it means in plain English.</p>
+
+<!-- ── STEP 1: Upload ── -->
+<div class="section" id="sec-upload">
+  <div class="section-label"><span class="section-num">1</span>Upload your dataset</div>
+  <div class="card">
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('fi').click()">
+      <div class="drop-icon">⬆</div>
+      <div class="drop-title">Drop a CSV file here</div>
+      <div class="drop-sub">or click to browse · CSV / TSV · up to 50k rows</div>
+    </div>
+    <input type="file" id="fi" accept=".csv,.tsv,.txt" style="display:none">
+
+    <div style="margin-top:18px;padding-top:18px;border-top:1px solid var(--border);">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-bottom:8px;">OR PASTE CSV DATA</div>
+      <textarea id="paste-area" placeholder="date,sessions,bookings,revenue&#10;2024-01-01,3126610,58707,983199&#10;2024-02-01,3132901,60163,1042608"></textarea>
+      <button class="btn btn-g" style="margin-top:8px;font-size:12px" onclick="loadPaste()">Parse pasted data →</button>
+    </div>
+
+    <div id="demo-row" style="margin-top:12px">
+      <button class="btn btn-g" style="font-size:11px;padding:7px 14px" onclick="loadDemo()">Load Skiplagged demo data (19 months actuals)</button>
+    </div>
+
+    <div id="schema-wrap" class="hidden" style="margin-top:20px">
+      <div id="file-chip-el"></div>
+      <div id="row-count" style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:6px;"></div>
+      <div class="schema-grid" id="schema-cols"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── STEP 2: Context ── -->
+<div class="section hidden" id="sec-ctx">
+  <div class="section-label"><span class="section-num">2</span>Business context</div>
+  <div class="card">
+    <div class="q-block">
+      <div class="q-label">What are you trying to answer?</div>
+      <div class="q-opts">
+        <div class="q-opt" onclick="pick(this,'goal','revenue')" data-v="revenue">What's driving revenue changes?</div>
+        <div class="q-opt" onclick="pick(this,'goal','growth')" data-v="growth">Are we growing or declining?</div>
+        <div class="q-opt" onclick="pick(this,'goal','conversion')" data-v="conversion">What's our conversion problem?</div>
+        <div class="q-opt" onclick="pick(this,'goal','seasonality')" data-v="seasonality">Is this seasonal or structural?</div>
+        <div class="q-opt" onclick="pick(this,'goal','channels')" data-v="channels">Which channels are working?</div>
+        <div class="q-opt" onclick="pick(this,'goal','feature')" data-v="feature">Did this feature move the needle?</div>
+      </div>
+    </div>
+    <div class="q-block" style="margin-top:16px">
+      <div class="q-label">North-star metric in this dataset <span style="color:var(--dim);font-weight:400">(column name or description)</span></div>
+      <textarea id="metric-inp" rows="2" placeholder="e.g. 'service_fee_revenue', 'total_bookings', or 'the revenue column'"></textarea>
+    </div>
+    <div class="q-block" style="margin-top:14px">
+      <div class="q-label">Focus window or segment? <span style="color:var(--dim);font-weight:400">(optional)</span></div>
+      <textarea id="focus-inp" rows="2" placeholder="e.g. 'last 12 months', 'US only', 'Q1 2025 vs Q1 2024'"></textarea>
+    </div>
+    <div style="margin-top:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button class="btn btn-p" id="run-btn" onclick="runAnalysis()" disabled>Run analysis →</button>
+      <button class="btn btn-g" style="font-size:12px" onclick="toggleTestMode()">Run test suite</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── RUNNING ── -->
+<div class="section hidden" id="sec-run">
+  <div class="card" style="text-align:center;padding:44px 24px">
+    <div class="pulse"></div>
+    <div style="font-family:var(--mono);font-size:12px;color:var(--accent);margin-bottom:6px" id="run-lbl">Initializing…</div>
+    <div style="font-size:13px;color:var(--muted)">Running statistical engine on your dataset</div>
+    <div class="prog-list" id="prog-list"></div>
+  </div>
+</div>
+
+<!-- ── RESULTS ── -->
+<div class="section hidden" id="sec-results">
+  <div id="results-container"></div>
+  <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+    <button class="btn btn-g" onclick="resetAll()">New analysis</button>
+    <button class="btn btn-g" onclick="window.print()">Export</button>
+  </div>
+</div>
+
+<!-- ── TEST SUITE ── -->
+<div class="section hidden" id="sec-test">
+  <div class="section-label"><span class="section-num">✓</span>Statistical engine test suite</div>
+  <div class="card">
+    <p style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:16px">Validating JS computations against Python/scipy ground truth (19 months of real Skiplagged data, Jan 2023 – Jul 2024)</p>
+    <div id="test-results"></div>
+    <div style="margin-top:16px">
+      <button class="btn btn-g" style="font-size:12px" onclick="runTests()">Re-run tests</button>
+      <button class="btn btn-g" style="font-size:12px;margin-left:8px" onclick="toggleTestMode()">Close</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- /app -->
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+//  GROUND TRUTH — Python/scipy output for validation
+// ═══════════════════════════════════════════════════════════════════════════
+const GT = {
+  meta: { n: 19, date_range: ["2023-01","2024-07"] },
+  t1_trend: { slope: 1378.1998, intercept: 1186920.33, r2: 0.0061, p_value: 0.750463 },
+  t2_seasonal: {"1":0.8779,"2":0.8787,"3":1.049,"4":1.0399,"5":1.0753,"6":1.0563,"7":1.0369,"8":1.074,"9":1.0039,"10":1.0245,"11":0.9657,"12":0.9039},
+  t2_meta: { peak_month: 5, trough_month: 1, amplitude_pct: 9.87 },
+  t3_pearson: { bookings: { r: 0.9321 }, sessions: { r: 0.381 }, hc_bookings: { r: 0.299 } },
+  t4_ols: { r2: 0.8928, adj_r2: 0.8713, intercept: -87733.14, beta_bookings: 19.0164, beta_trend: 2739.17, p_intercept: 0.44428, p_bookings: 0.0, p_trend: 0.07685 },
+  t5_stats: { mean: 1199324.12, std: 96586.47, q1: 1140350.4, q3: 1263452.61, iqr: 123102.2, iqr_lo: 955697.1, iqr_hi: 1448105.91 },
+  t6_yoy: { "2024-01":14.17,"2024-02":2.15,"2024-03":0.9,"2024-04":-2.53,"2024-05":-9.92,"2024-06":-1.55,"2024-07":-9.45 },
+  t7_cvr: { mean_pct: 2.2515, std_pct: 0.2307, trend_slope: 0.03407, p_value: 0.0 },
+  t8_rpb: { mean: 18.06, std: 0.55, trend_slope: 0.0441, p_value: 0.0588 },
+  raw: {
+    dates: ["2023-01","2023-02","2023-03","2023-04","2023-05","2023-06","2023-07","2023-08","2023-09","2023-10","2023-11","2023-12","2024-01","2024-02","2024-03","2024-04","2024-05","2024-06","2024-07"],
+    revenue: [983199.11,1042608.54,1252437.49,1263143.61,1357003.54,1276735.35,1305253.15,1288064.84,1204049.94,1228728.93,1158186.18,1084027.99,1122514.63,1065033.64,1263761.6,1231213.69,1222374.27,1256971.0,1181850.87],
+    bookings: [58707,60163,71728,71271,73968,70380,67725,70428,67466,68071,64412,58495,60316,58825,69071,69242,69427,67601,64022],
+    sessions: [3126610,3132901,3735786,3343418,3443483,3438516,3412290,3138559,2719844,2648019,2710968,2593457,2857867,2668053,2837515,2721224,2780552,2730050,2505563],
+    hc_bookings: [16028,15656,17819,18718,19041,16416,19032,20867,20878,21005,20640,20305,22110,19268,22454,22756,21221,23147,22087]
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  STATISTICS ENGINE — pure JS, validated against Python/scipy ground truth
+// ═══════════════════════════════════════════════════════════════════════════
+const Stats = (() => {
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  function mean(a) { return a.reduce((s,v)=>s+v,0)/a.length; }
+  function variance(a) { const m=mean(a); return a.reduce((s,v)=>s+(v-m)**2,0)/(a.length-1); }
+  function stddev(a) { return Math.sqrt(variance(a)); }
+  function stddevPop(a) { const m=mean(a); return Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/a.length); }
+
+  // ── Regularised incomplete beta (for t-distribution p-values) ────────────
+  // Abramowitz & Stegun continued fraction approximation
+  function betainc(x, a, b) {
+    if (x < 0 || x > 1) return NaN;
+    if (x === 0) return 0;
+    if (x === 1) return 1;
+    const lbeta = lgamma(a) + lgamma(b) - lgamma(a+b);
+    const front = Math.exp(Math.log(x)*a + Math.log(1-x)*b - lbeta) / a;
+    return front * betacf(x, a, b);
+  }
+  function lgamma(z) {
+    const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5];
+    let y=z,tmp=z+5.5,ser=1.000000000190015;
+    tmp-=(z+0.5)*Math.log(tmp);
+    for(let i=0;i<6;i++) ser+=c[i]/++y;
+    return -tmp+Math.log(2.5066282746310005*ser/z);
+  }
+  function betacf(x, a, b) {
+    const MAXIT=200, EPS=3e-7;
+    let qab=a+b, qap=a+1, qam=a-1, c=1, d=1-qab*x/qap;
+    if(Math.abs(d)<1e-30) d=1e-30; d=1/d;
+    let h=d;
+    for(let m=1;m<=MAXIT;m++) {
+      const m2=2*m;
+      let aa=m*(b-m)*x/((qam+m2)*(a+m2));
+      d=1+aa*d; if(Math.abs(d)<1e-30) d=1e-30;
+      c=1+aa/c; if(Math.abs(c)<1e-30) c=1e-30;
+      d=1/d; h*=d*c;
+      aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));
+      d=1+aa*d; if(Math.abs(d)<1e-30) d=1e-30;
+      c=1+aa/c; if(Math.abs(c)<1e-30) c=1e-30;
+      d=1/d; const del=d*c; h*=del;
+      if(Math.abs(del-1)<EPS) break;
+    }
+    return h;
+  }
+  // Two-tailed p-value from t-statistic with df degrees of freedom
+  function tpval(t, df) {
+    const x = df/(df + t*t);
+    return betainc(x, df/2, 0.5);
+  }
+
+  // ── Linear regression y ~ x ───────────────────────────────────────────────
+  function linReg(x, y) {
+    const n=x.length, mx=mean(x), my=mean(y);
+    let sxy=0,sxx=0;
+    for(let i=0;i<n;i++){sxy+=(x[i]-mx)*(y[i]-my);sxx+=(x[i]-mx)**2;}
+    const slope=sxy/sxx, intercept=my-slope*mx;
+    const yhat=x.map(v=>slope*v+intercept);
+    const ssres=y.reduce((s,v,i)=>s+(v-yhat[i])**2,0);
+    const sstot=y.reduce((s,v)=>s+(v-my)**2,0);
+    const r2=1-ssres/sstot;
+    const se=Math.sqrt(ssres/(n-2)/sxx);
+    const tstat=slope/se;
+    const pval=tpval(tstat, n-2);
+    return {slope,intercept,r2,r:Math.sqrt(r2)*Math.sign(slope),se,tstat,pval};
+  }
+
+  // ── Pearson correlation ───────────────────────────────────────────────────
+  function pearson(x, y) {
+    const n=x.length, mx=mean(x), my=mean(y);
+    let sxy=0,sxx=0,syy=0;
+    for(let i=0;i<n;i++){const dx=x[i]-mx,dy=y[i]-my;sxy+=dx*dy;sxx+=dx*dx;syy+=dy*dy;}
+    const r=sxy/Math.sqrt(sxx*syy);
+    const tstat=r*Math.sqrt(n-2)/Math.sqrt(1-r*r);
+    return {r, pval: tpval(tstat, n-2)};
+  }
+
+  // ── OLS multiple regression — X is array of column arrays (no intercept col) ──
+  function olsMultiple(Xcols, y) {
+    const n=y.length, k=Xcols.length+1;
+    // Build design matrix with intercept
+    const X = y.map((_,i)=>[1,...Xcols.map(c=>c[i])]);
+    // Xt = transpose(X)
+    const Xt = X[0].map((_,j)=>X.map(row=>row[j]));
+    // XtX
+    const XtX = Xt.map(row=>Xt[0].map((_,j)=>row.reduce((s,v,i)=>s+v*Xt[j][i],0)));
+    const Xty = Xt.map(row=>row.reduce((s,v,i)=>s+v*y[i],0));
+    // Invert XtX using Gauss-Jordan
+    const inv = invertMatrix([...XtX.map(r=>[...r])]);
+    if (!inv) return null;
+    const coeffs = inv.map(row=>row.reduce((s,v,i)=>s+v*Xty[i],0));
+    const yhat = X.map(row=>row.reduce((s,v,i)=>s+v*coeffs[i],0));
+    const ssres = y.reduce((s,v,i)=>s+(v-yhat[i])**2,0);
+    const sstot = y.reduce((s,v)=>s+(v-mean(y))**2,0);
+    const r2 = 1-ssres/sstot;
+    const adjR2 = 1-(1-r2)*(n-1)/(n-k-1);
+    const mse = ssres/(n-k);
+    const seCoeffs = inv.map((row,i)=>Math.sqrt(mse*inv[i][i]));
+    const tstats = coeffs.map((c,i)=>c/seCoeffs[i]);
+    const pvals = tstats.map(t=>tpval(t, n-k));
+    return {coeffs,r2,adjR2,seCoeffs,tstats,pvals,ssres,mse};
+  }
+  function invertMatrix(m) {
+    const n=m.length;
+    const I=m.map((_,i)=>m[0].map((_,j)=>i===j?1:0));
+    for(let i=0;i<n;i++){
+      let maxV=Math.abs(m[i][i]),maxR=i;
+      for(let r=i+1;r<n;r++) if(Math.abs(m[r][i])>maxV){maxV=Math.abs(m[r][i]);maxR=r;}
+      [m[i],m[maxR]]=[m[maxR],m[i]]; [I[i],I[maxR]]=[I[maxR],I[i]];
+      if(Math.abs(m[i][i])<1e-12) return null;
+      const d=m[i][i];
+      for(let j=0;j<n;j++){m[i][j]/=d;I[i][j]/=d;}
+      for(let r=0;r<n;r++){if(r===i) continue; const f=m[r][i]; for(let j=0;j<n;j++){m[r][j]-=f*m[i][j];I[r][j]-=f*I[i][j];}}
+    }
+    return I;
+  }
+
+  // ── Seasonal index ────────────────────────────────────────────────────────
+  function seasonalIndex(dates, values) {
+    const buckets={};
+    dates.forEach((d,i)=>{
+      const m=parseInt(d.slice(5,7));
+      if(!buckets[m]) buckets[m]=[];
+      buckets[m].push(values[i]);
+    });
+    const mn=mean(values);
+    const si={};
+    for(const m in buckets) si[parseInt(m)]=mean(buckets[m])/mn;
+    return si;
+  }
+
+  // ── Anomaly detection (IQR + z-score) ────────────────────────────────────
+  function anomalies(values, dates, zThresh=2.0) {
+    const sorted=[...values].sort((a,b)=>a-b);
+    const q1=sorted[Math.floor(sorted.length*0.25)];
+    const q3=sorted[Math.floor(sorted.length*0.75)];
+    const iqr=q3-q1, lo=q1-1.5*iqr, hi=q3+1.5*iqr;
+    const m=mean(values), s=stddevPop(values);
+    const out=values.map((v,i)=>{
+      const z=(v-m)/s;
+      const isOut=v<lo||v>hi||Math.abs(z)>zThresh;
+      return {date:dates[i],value:v,z:+z.toFixed(3),outlier:isOut,direction:v>m?'high':'low'};
+    }).filter(x=>x.outlier);
+    return {outliers:out,q1,q3,iqr,lo,hi,mean:m,std:s};
+  }
+
+  // ── YoY growth ────────────────────────────────────────────────────────────
+  function yoyGrowth(dates, values) {
+    const map={};
+    dates.forEach((d,i)=>map[d]=values[i]);
+    const result=[];
+    dates.forEach((d,i)=>{
+      const yr=parseInt(d.slice(0,4)), mo=d.slice(4);
+      const prev=`${yr-1}${mo}`;
+      if(map[prev]!=null) result.push({date:d,prev_date:prev,value:values[i],prev_value:map[prev],yoy:((values[i]-map[prev])/map[prev]*100)});
+    });
+    return result;
+  }
+
+  // ── Descriptive stats ─────────────────────────────────────────────────────
+  function describe(a) {
+    const s=[...a].sort((x,y)=>x-y);
+    return {n:a.length,mean:mean(a),std:stddevPop(a),min:s[0],q1:s[Math.floor(s.length*.25)],median:s[Math.floor(s.length*.5)],q3:s[Math.floor(s.length*.75)],max:s[s.length-1]};
+  }
+
+  return {mean,stddev,stddevPop,linReg,pearson,olsMultiple,seasonalIndex,anomalies,yoyGrowth,describe,tpval};
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  TEST SUITE — validates JS engine vs Python ground truth
+// ═══════════════════════════════════════════════════════════════════════════
+function runTests() {
+  const r=GT.raw, rev=r.revenue, books=r.bookings, sess=r.sessions, hcb=r.hc_bookings, dates=r.dates;
+  const t=rev.map((_,i)=>i);
+  const tol = (js,py,th=0.005) => Math.abs((js-py)/py) < th;
+  const results=[];
+  function check(name,js,py,th=0.005){
+    const ok=tol(js,py,th);
+    results.push({name,js:+js.toFixed(4),py:+py.toFixed(4),ok});
+  }
+
+  // T1: linear trend
+  const t1=Stats.linReg(t,rev);
+  check('T1 slope',t1.slope,GT.t1_trend.slope,0.005);
+  check('T1 intercept',t1.intercept,GT.t1_trend.intercept,0.001);
+  check('T1 R²',t1.r2,GT.t1_trend.r2,0.1);
+  check('T1 p-value',t1.pval,GT.t1_trend.p_value,0.02);
+
+  // T2: seasonal index
+  const si=Stats.seasonalIndex(dates,rev);
+  [1,2,3,4,5,6,7,8,9,10,11,12].forEach(m=>{
+    if(si[m]!=null&&GT.t2_seasonal[String(m)]!=null)
+      check(`T2 SI-${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]}`,si[m],GT.t2_seasonal[String(m)],0.008);
+  });
+
+  // T3: pearson correlations
+  const p_b=Stats.pearson(books,rev);
+  const p_s=Stats.pearson(sess,rev);
+  const p_h=Stats.pearson(hcb,rev);
+  check('T3 r(rev,books)',p_b.r,GT.t3_pearson.bookings.r,0.005);
+  check('T3 r(rev,sess)',p_s.r,GT.t3_pearson.sessions.r,0.02);
+  check('T3 r(rev,hcb)',p_h.r,GT.t3_pearson.hc_bookings.r,0.02);
+
+  // T4: OLS multiple regression
+  const ols=Stats.olsMultiple([books,t],rev);
+  if(ols){
+    check('T4 R²',ols.r2,GT.t4_ols.r2,0.003);
+    check('T4 adj-R²',ols.adjR2,GT.t4_ols.adj_r2,0.005);
+    check('T4 intercept',ols.coeffs[0],GT.t4_ols.intercept,0.02);
+    check('T4 β_bookings',ols.coeffs[1],GT.t4_ols.beta_bookings,0.005);
+    check('T4 β_trend',ols.coeffs[2],GT.t4_ols.beta_trend,0.01);
+    check('T4 p_bookings',ols.pvals[1],0.000001,2.0);// near 0
+  }
+
+  // T5: descriptive stats
+  const d=Stats.describe(rev);
+  check('T5 mean',d.mean,GT.t5_stats.mean,0.001);
+  check('T5 std',d.std,GT.t5_stats.std,0.005);
+  check('T5 q1',d.q1,GT.t5_stats.q1,0.01);
+  check('T5 q3',d.q3,GT.t5_stats.q3,0.01);
+
+  // T7: conversion rate
+  const cvr=books.map((b,i)=>b/sess[i]*100);
+  const cvr_reg=Stats.linReg(t,cvr);
+  check('T7 mean cvr%',Stats.mean(cvr),GT.t7_cvr.mean_pct,0.003);
+  check('T7 cvr std',Stats.stddevPop(cvr),GT.t7_cvr.std_pct,0.01);
+  check('T7 cvr slope',cvr_reg.slope,GT.t7_cvr.trend_slope,0.02);
+
+  // T8: rev per booking
+  const rpb=rev.map((r,i)=>r/books[i]);
+  const rpb_reg=Stats.linReg(t,rpb);
+  check('T8 mean rev/booking',Stats.mean(rpb),GT.t8_rpb.mean,0.003);
+  check('T8 rpb slope',rpb_reg.slope,GT.t8_rpb.trend_slope,0.05);
+
+  const pass=results.filter(r=>r.ok).length;
+  const fail=results.filter(r=>!r.ok).length;
+
+  const container=document.getElementById('test-results');
+  container.innerHTML=`
+    <div style="display:flex;gap:10px;margin-bottom:14px;align-items:center">
+      <span class="test-badge badge-ok">${pass} passed</span>
+      ${fail?`<span class="test-badge badge-fail">${fail} failed</span>`:''}
+      <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">${((pass/results.length)*100).toFixed(0)}% pass rate</span>
+    </div>
+    <div style="overflow-x:auto">
+    <div style="display:grid;grid-template-columns:180px 1fr 1fr 60px;gap:8px;font-family:var(--mono);font-size:10px;color:var(--dim);padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:4px">
+      <span>test</span><span>python/scipy</span><span>js engine</span><span>result</span>
+    </div>
+    ${results.map(r=>`
+    <div style="display:grid;grid-template-columns:180px 1fr 1fr 60px;gap:8px;font-family:var(--mono);font-size:11px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04);align-items:center">
+      <span style="color:var(--muted)">${r.name}</span>
+      <span style="color:var(--dim)">${r.py}</span>
+      <span style="color:${r.ok?'var(--teal)':'var(--red)'}">${r.js}</span>
+      <span class="test-badge ${r.ok?'badge-ok':'badge-fail'}">${r.ok?'✓ pass':'✗ fail'}</span>
+    </div>`).join('')}
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ANALYSIS RUNNER — stats locally, narrative via Claude API
+// ═══════════════════════════════════════════════════════════════════════════
+let parsedData=null, detectedCols=null;
+const ctx={goal:null,metric:'',focus:''};
+
+// File handling
+document.getElementById('drop-zone').addEventListener('dragover',e=>{e.preventDefault();e.currentTarget.classList.add('drag');});
+document.getElementById('drop-zone').addEventListener('dragleave',e=>e.currentTarget.classList.remove('drag'));
+document.getElementById('drop-zone').addEventListener('drop',e=>{e.preventDefault();e.currentTarget.classList.remove('drag');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
+document.getElementById('fi').addEventListener('change',e=>{if(e.target.files[0])handleFile(e.target.files[0]);});
+
+function handleFile(f){Papa.parse(f,{header:true,dynamicTyping:true,skipEmptyLines:true,complete:r=>{ingestData(r.data,r.meta.fields,f.name);}});}
+function loadPaste(){const raw=document.getElementById('paste-area').value.trim();if(!raw)return;Papa.parse(raw,{header:true,dynamicTyping:true,skipEmptyLines:true,complete:r=>{ingestData(r.data,r.meta.fields,'pasted data');}});}
+function loadDemo(){ingestData(GT.raw.dates.map((d,i)=>({date:d,sessions:GT.raw.sessions[i],bookings:GT.raw.bookings[i],service_fee_revenue:GT.raw.revenue[i],hc_bookings:GT.raw.hc_bookings[i]})),['date','sessions','bookings','service_fee_revenue','hc_bookings'],'Skiplagged actuals 2023-01 to 2024-07');}
+
+function ingestData(data,fields,name){
+  parsedData=data;
+  detectedCols=inferCols(data,fields);
+  showSchema(name,data.length);
+  show('sec-ctx');
+  document.getElementById('run-btn').disabled=false;
+}
+
+function inferCols(data,fields){
+  if(!fields||!data.length) return [];
+  return fields.map(f=>{
+    const vals=data.map(r=>r[f]).filter(v=>v!=null&&v!=='');
+    const nums=vals.filter(v=>typeof v==='number');
+    const dts=vals.filter(v=>typeof v==='string'&&/^\d{4}/.test(v));
+    let type='text';
+    if(nums.length/vals.length>.7) type='numeric';
+    else if(dts.length/vals.length>.5) type='date';
+    return {name:f,type,sample:vals[0]};
+  });
+}
+
+function showSchema(filename,rows){
+  const sw=document.getElementById('schema-wrap');
+  document.getElementById('file-chip-el').innerHTML=`<div class="file-chip">✓ ${esc(filename)}</div>`;
+  document.getElementById('row-count').textContent=`${rows.toLocaleString()} rows · ${detectedCols.length} columns`;
+  document.getElementById('schema-cols').innerHTML=detectedCols.map(c=>`<div class="schema-item"><div class="sc-col">${esc(c.name)}</div><div class="sc-type">${c.type}</div><div class="sc-sample">${String(c.sample??'—').substring(0,20)}</div></div>`).join('');
+  sw.classList.remove('hidden');
+}
+
+// Context options
+function pick(el,group,val){
+  document.querySelectorAll(`.q-opt`).forEach(o=>{ if(o.getAttribute('data-v')&&o.parentElement===el.parentElement) o.classList.remove('on'); });
+  el.classList.add('on'); ctx.goal=val;
+}
+
+async function runAnalysis(){
+  ctx.metric=document.getElementById('metric-inp').value;
+  ctx.focus=document.getElementById('focus-inp').value;
+  if(!parsedData||!parsedData.length){alert('Upload a dataset first.');return;}
+  show('sec-run');
+
+  const steps=['Detecting data structure','Computing trend & regression','Calculating seasonal index','Running correlation analysis','Detecting anomalies & outliers','Generating narrative via Claude AI'];
+  const prog=document.getElementById('prog-list');
+  prog.innerHTML=steps.map((s,i)=>`<div class="prog-item" id="pi${i}"><div class="prog-dot"></div>${s}</div>`).join('');
+
+  let si=0;
+  const adv=()=>{
+    if(si>0)document.getElementById(`pi${si-1}`)?.classList.replace('act','done');
+    const el=document.getElementById(`pi${si}`);
+    if(el){el.classList.add('act');document.getElementById('run-lbl').textContent=el.textContent.trim();}
+    si++;
+  };
+  adv();
+
+  try {
+    // ── 1. Detect columns ──────────────────────────────────────────────────
+    const numCols=detectedCols.filter(c=>c.type==='numeric').map(c=>c.name);
+    const dateCols=detectedCols.filter(c=>c.type==='date').map(c=>c.name);
+    const dateCol=dateCols[0]||null;
+    const metricCol=guessMetric(numCols,ctx.metric)||numCols[0];
+    if(!metricCol){throw new Error('No numeric columns detected. Check your CSV format.');}
+    const rowVals=r=>parsedData.map(row=>{const v=row[r];return typeof v==='number'?v:parseFloat(v);}).filter(v=>!isNaN(v));
+    const Y=rowVals(metricCol);
+    const dates=dateCol?parsedData.map(r=>String(r[dateCol]).slice(0,7)):Y.map((_,i)=>`T${i+1}`);
+    const T=Y.map((_,i)=>i);
+    await sleep(700); adv();
+
+    // ── 2. Core computations ───────────────────────────────────────────────
+    const trend=Stats.linReg(T,Y);
+    const pearsonPairs=numCols.filter(c=>c!==metricCol).slice(0,4).map(c=>{
+      const X=rowVals(c);const p=Stats.pearson(X,Y);return{name:c,r:p.r,p:p.pval,data:X};
+    }).sort((a,b)=>Math.abs(b.r)-Math.abs(a.r));
+    const topPredictors=pearsonPairs.slice(0,2).map(p=>p.data);
+    const ols=topPredictors.length>0?Stats.olsMultiple([...topPredictors,T],Y):null;
+    const si_data=dateCol?Stats.seasonalIndex(dates,Y):null;
+    const anom=Stats.anomalies(Y,dates);
+    const yoy_data=dateCol?Stats.yoyGrowth(dates,Y):[];
+    const desc=Stats.describe(Y);
+    await sleep(600); adv(); await sleep(500); adv(); await sleep(500); adv();
+
+    // ── 3. Package for Claude narrative ───────────────────────────────────
+    const statsPayload={
+      metric:metricCol,n:Y.length,date_range:dateCol?[dates[0],dates[dates.length-1]]:null,
+      trend:{slope:+trend.slope.toFixed(2),r2:+trend.r2.toFixed(4),p_value:+trend.pval.toFixed(4),direction:trend.slope>0?'increasing':'decreasing'},
+      seasonal:si_data?{peak:Object.entries(si_data).sort((a,b)=>b[1]-a[1])[0]:null,trough:Object.entries(si_data).sort((a,b)=>a[1]-b[1])[0]:null,amplitude:si_data?+(((Math.max(...Object.values(si_data))-Math.min(...Object.values(si_data)))/2*100).toFixed(1)):null}:null,
+      correlations:pearsonPairs.slice(0,4).map(p=>({name:p.name,r:+p.r.toFixed(4),p:+p.p.toFixed(5)})),
+      ols:ols?{r2:+ols.r2.toFixed(4),adj_r2:+ols.adjR2.toFixed(4),predictors:pearsonPairs.slice(0,2).map((p,i)=>({name:p.name,coeff:+ols.coeffs[i+1].toFixed(4),p_value:+ols.pvals[i+1].toFixed(5)})),trend_coeff:+ols.coeffs[ols.coeffs.length-1].toFixed(2)}:null,
+      anomalies:anom.outliers.map(o=>({date:o.date,value:+o.value.toFixed(0),z:o.z,direction:o.direction})),
+      stats:{mean:+desc.mean.toFixed(2),std:+desc.std.toFixed(2),min:+desc.min.toFixed(2),max:+desc.max.toFixed(2)},
+      yoy:yoy_data.slice(-8).map(y=>({date:y.date,pct:+y.yoy.toFixed(2)})),
+      goal:ctx.goal||'general',
+      context:`Skiplagged.com. Revenue streams: direct booking service fees and affiliate/partner referral fees. Business context: ${ctx.focus||'full dataset analysis'}`
+    };
+
+    adv();
+    const narrative=await callClaude(statsPayload);
+    await sleep(300);
+    renderResults({stats:statsPayload,narrative,Y,dates,T,trend,si_data,pearsonPairs,ols,anom,yoy_data,metricCol,desc,dateCol});
+  } catch(e){
+    renderError(e.message||String(e));
+  }
+}
+
+function guessMetric(cols,hint){
+  if(!hint) return cols.find(c=>/rev|fee|income|earnings|gmv/i.test(c))||cols[0];
+  return cols.find(c=>c.toLowerCase().includes(hint.toLowerCase().replace(/['"]/g,'')))||cols[0];
+}
+
+async function callClaude(statsPayload){
+  const prompt=`You are a senior business analyst for Skiplagged.com. Statistical computations have already been run — your job is to interpret them into clear business language.
+
+Context: ${statsPayload.context}
+Goal: ${statsPayload.goal}
+Metric analyzed: ${statsPayload.metric} (n=${statsPayload.n} periods${statsPayload.date_range?`, ${statsPayload.date_range[0]}–${statsPayload.date_range[1]}`:''})
+
+Statistical results:
+${JSON.stringify(statsPayload, null, 2)}
+
+Return ONLY valid JSON (no markdown, no preamble):
+{
+  "headline": "One sentence capturing the most important finding with specific numbers",
+  "modules": [
+    {
+      "id": "trend",
+      "plain_english": "2-3 sentences explaining the trend in plain English for a non-technical exec. Use the actual numbers. Explain what p=${statsPayload.trend.p_value} means in plain words.",
+      "what_now": "One specific, concrete action to take based on this finding."
+    },
+    {
+      "id": "seasonality",
+      "plain_english": "2-3 sentences about seasonal patterns. Use real month names and percentages from the seasonal index.",
+      "what_now": "One concrete action."
+    },
+    {
+      "id": "correlations",
+      "plain_english": "2-3 sentences about which variables actually drive the metric. Interpret the correlation coefficients and OLS coefficients in plain English.",
+      "what_now": "One concrete action."
+    },
+    {
+      "id": "anomalies",
+      "plain_english": "2-3 sentences about outliers or unusual periods. If no anomalies, explain what that means for the business.",
+      "what_now": "One concrete action."
+    },
+    {
+      "id": "yoy",
+      "plain_english": "2-3 sentences about year-over-year trajectory with specific percentages.",
+      "what_now": "One concrete action."
+    }
+  ]
+}`;
+
+  const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1800,messages:[{role:'user',content:prompt}]})});
+  if(!res.ok) throw new Error(`Claude API: ${res.status}`);
+  const data=await res.json();
+  const txt=data.content?.filter(c=>c.type==='text').map(c=>c.text).join('');
+  if(!txt) throw new Error('No response from Claude');
+  const clean=txt.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+  try{return JSON.parse(clean);}catch(e){const m=clean.match(/\{[\s\S]*\}/);if(m)return JSON.parse(m[0]);throw new Error('Could not parse Claude response');}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  RENDER RESULTS
+// ═══════════════════════════════════════════════════════════════════════════
+const chartRegistry=[];
+function renderResults({stats,narrative,Y,dates,T,trend,si_data,pearsonPairs,ols,anom,yoy_data,metricCol,desc,dateCol}){
+  chartRegistry.forEach(c=>c.destroy()); chartRegistry.length=0;
+  const mods=narrative.modules||[];
+  const getText=(id,field)=>{const m=mods.find(x=>x.id===id);return m?m[field]||'':'';}
+
+  const months_en=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fmt=v=>{if(Math.abs(v)>=1e6)return `$${(v/1e6).toFixed(2)}M`;if(Math.abs(v)>=1e3)return `$${(v/1e3).toFixed(1)}K`;return `$${v.toFixed(0)}`;};
+  const fmtN=v=>{if(Math.abs(v)>=1e6)return `${(v/1e6).toFixed(2)}M`;if(Math.abs(v)>=1e3)return `${(v/1e3).toFixed(0)}K`;return v.toFixed(0);};
+  const pFmt=p=>{if(p<0.001)return 'p < 0.001';if(p<0.01)return 'p < 0.01';if(p<0.05)return `p = ${p.toFixed(3)}`;return `p = ${p.toFixed(3)}`;};
+  const sigClass=p=>p<0.05?'sig-yes':p<0.15?'sig-warn':'sig-no';
+
+  // ── Module 1: Trend ──────────────────────────────────────────────────────
+  const trendHTML=`
+    <div class="mod-card" id="mc-trend">
+      <div class="mod-head">
+        <div class="mod-ic">↗</div>
+        <div><div class="mod-title">Trend analysis</div><div class="mod-subtitle">${metricCol} — linear regression over time</div></div>
+      </div>
+      <div class="mod-body">
+        <div class="stats-row">
+          <div class="stat-c"><div class="stat-lbl">Monthly change</div><div class="stat-val ${trend.slope>0?'pos':'neg'}">${trend.slope>0?'+':''}${fmt(trend.slope)}/mo</div></div>
+          <div class="stat-c"><div class="stat-lbl">R² (fit)</div><div class="stat-val neu">${(trend.r2*100).toFixed(1)}%</div></div>
+          <div class="stat-c"><div class="stat-lbl">Overall mean</div><div class="stat-val neu">${fmt(desc.mean)}</div></div>
+          <div class="stat-c"><div class="stat-lbl">Std deviation</div><div class="stat-val neu">${fmt(desc.std)}</div></div>
+        </div>
+        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('trend','plain_english'))}</div></div>
+        <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
+        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('trend','what_now'))}</div></div>
+        <div class="tech-row"><span class="tech-tag">OLS linear regression</span><span class="sig-pill ${sigClass(trend.pval)}">${pFmt(trend.pval)}</span><span class="tech-tag">n=${Y.length}</span></div>
+      </div>
+    </div>`;
+
+  // ── Module 2: Seasonality ────────────────────────────────────────────────
+  const si_entries=si_data?Object.entries(si_data).sort((a,b)=>a[0]-b[0]):[];
+  const seasonHTML=`
+    <div class="mod-card">
+      <div class="mod-head">
+        <div class="mod-ic">~</div>
+        <div><div class="mod-title">Seasonality</div><div class="mod-subtitle">Monthly index — how much each month deviates from annual average</div></div>
+      </div>
+      <div class="mod-body">
+        ${si_entries.length?`<div class="stats-row">${si_entries.slice(0,4).sort((a,b)=>b[1]-a[1]).map(([m,v])=>`<div class="stat-c"><div class="stat-lbl">${months_en[parseInt(m)-1]}</div><div class="stat-val ${v>1?'pos':v<0.95?'neg':'neu'}">${(v*100).toFixed(1)}%</div></div>`).join('')}</div>`:''}
+        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('seasonality','plain_english')||'No date column detected — seasonal analysis requires a date column.')}</div></div>
+        ${si_entries.length?`<div class="chart-wrap"><canvas id="chart-season"></canvas></div>`:''}
+        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('seasonality','what_now'))}</div></div>
+        <div class="tech-row"><span class="tech-tag">Seasonal index (ratio-to-mean)</span>${si_entries.length?`<span class="tech-tag">Peak: ${months_en[parseInt(si_entries.sort((a,b)=>b[1]-a[1])[0][0])-1]}</span>`:''}</div>
+      </div>
+    </div>`;
+
+  // ── Module 3: Correlations + OLS ─────────────────────────────────────────
+  const maxR=Math.max(...pearsonPairs.map(p=>Math.abs(p.r)));
+  const corrHTML=`
+    <div class="mod-card">
+      <div class="mod-head">
+        <div class="mod-ic">r</div>
+        <div><div class="mod-title">Driver analysis</div><div class="mod-subtitle">Correlations + OLS regression — what actually moves ${metricCol}</div></div>
+      </div>
+      <div class="mod-body">
+        ${ols?`<div class="stats-row">
+          <div class="stat-c"><div class="stat-lbl">OLS R²</div><div class="stat-val pos">${(ols.r2*100).toFixed(1)}%</div></div>
+          <div class="stat-c"><div class="stat-lbl">Adj-R²</div><div class="stat-val pos">${(ols.adjR2*100).toFixed(1)}%</div></div>
+          <div class="stat-c"><div class="stat-lbl">Top driver</div><div class="stat-val neu">${esc(pearsonPairs[0]?.name||'—')}</div></div>
+        </div>`:''}
+        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('correlations','plain_english'))}</div></div>
+        <div style="margin-bottom:18px">
+          ${pearsonPairs.map(p=>`<div class="driver-row">
+            <span class="d-lbl">${esc(p.name)}</span>
+            <div class="bar-w"><div class="bar-f" style="width:${Math.abs(p.r)/maxR*100}%;background:${p.r>0?'#00d4a8':'#ff6b6b'}"></div></div>
+            <span class="d-val" style="color:${p.r>0?'var(--teal)':'var(--red)'}">${p.r>0?'+':''}${p.r.toFixed(3)}</span>
+            <span class="d-sig">${pFmt(p.p)}</span>
+          </div>`).join('')}
+        </div>
+        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('correlations','what_now'))}</div></div>
+        <div class="tech-row"><span class="tech-tag">Pearson correlation</span>${ols?`<span class="tech-tag">OLS multiple regression</span>`:''}</div>
+      </div>
+    </div>`;
+
+  // ── Module 4: Anomalies ──────────────────────────────────────────────────
+  const anomHTML=`
+    <div class="mod-card">
+      <div class="mod-head">
+        <div class="mod-ic">⚠</div>
+        <div><div class="mod-title">Anomaly detection</div><div class="mod-subtitle">IQR × 1.5 bounds + z-score > 2.0 — ${anom.outliers.length} outlier${anom.outliers.length!==1?'s':''} detected</div></div>
+      </div>
+      <div class="mod-body">
+        <div class="stats-row">
+          <div class="stat-c"><div class="stat-lbl">IQR lower</div><div class="stat-val neu">${fmt(anom.lo)}</div></div>
+          <div class="stat-c"><div class="stat-lbl">IQR upper</div><div class="stat-val neu">${fmt(anom.hi)}</div></div>
+          <div class="stat-c"><div class="stat-lbl">Outliers found</div><div class="stat-val ${anom.outliers.length?'warn':'pos'}">${anom.outliers.length}</div></div>
+        </div>
+        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('anomalies','plain_english'))}</div></div>
+        ${anom.outliers.length?`<div style="margin-bottom:16px">${anom.outliers.map(o=>`<div class="driver-row">
+          <span class="d-lbl">${esc(o.date)}</span>
+          <div class="bar-w"><div class="bar-f" style="width:${Math.min(100,Math.abs(o.z)/3*100)}%;background:${o.direction==='high'?'var(--amber)':'var(--red)'}"></div></div>
+          <span class="d-val" style="color:${o.direction==='high'?'var(--amber)':'var(--red)'}">${fmt(o.value)}</span>
+          <span class="d-sig">z=${o.z>0?'+':''}${o.z.toFixed(2)}</span>
+        </div>`).join('')}</div>`:'<div style="font-family:var(--mono);font-size:12px;color:var(--teal);margin-bottom:16px;padding:12px;background:rgba(0,212,168,.06);border-radius:8px">No outliers detected — distribution is consistent.</div>'}
+        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('anomalies','what_now'))}</div></div>
+        <div class="tech-row"><span class="tech-tag">IQR × 1.5 method</span><span class="tech-tag">z-score threshold: |z| > 2.0</span></div>
+      </div>
+    </div>`;
+
+  // ── Module 5: YoY ────────────────────────────────────────────────────────
+  const maxAbsYoy=yoy_data.length?Math.max(...yoy_data.map(y=>Math.abs(y.yoy))):1;
+  const yoyHTML=`
+    <div class="mod-card">
+      <div class="mod-head">
+        <div class="mod-ic">%</div>
+        <div><div class="mod-title">Year-over-year trajectory</div><div class="mod-subtitle">${yoy_data.length} comparable periods found</div></div>
+      </div>
+      <div class="mod-body">
+        ${yoy_data.length?`<div class="stats-row">
+          <div class="stat-c"><div class="stat-lbl">Mean YoY</div><div class="stat-val ${Stats.mean(yoy_data.map(y=>y.yoy))>0?'pos':'neg'}">${Stats.mean(yoy_data.map(y=>y.yoy))>0?'+':''}${Stats.mean(yoy_data.map(y=>y.yoy)).toFixed(1)}%</div></div>
+          <div class="stat-c"><div class="stat-lbl">Best period</div><div class="stat-val pos">${yoy_data.sort((a,b)=>b.yoy-a.yoy)[0]?.date} (+${yoy_data[0]?.yoy.toFixed(1)}%)</div></div>
+          <div class="stat-c"><div class="stat-lbl">Worst period</div><div class="stat-val neg">${[...yoy_data].sort((a,b)=>a.yoy-b.yoy)[0]?.date} (${[...yoy_data].sort((a,b)=>a.yoy-b.yoy)[0]?.yoy.toFixed(1)}%)</div></div>
+        </div>`:``}
+        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('yoy','plain_english')||'No comparable year-over-year periods found — need at least 13 months of data.')}</div></div>
+        ${yoy_data.length?`<div style="margin-bottom:16px">${[...yoy_data].sort((a,b)=>new Date(a.date)-new Date(b.date)).map(y=>`<div class="driver-row">
+          <span class="d-lbl">${esc(y.date)}</span>
+          <div class="bar-w"><div class="bar-f" style="width:${Math.abs(y.yoy)/maxAbsYoy*100}%;background:${y.yoy>0?'#00d4a8':'#ff6b6b'}"></div></div>
+          <span class="d-val" style="color:${y.yoy>0?'var(--teal)':'var(--red)'}">${y.yoy>0?'+':''}${y.yoy.toFixed(1)}%</span>
+          <span class="d-sig">${fmt(y.value)}</span>
+        </div>`).join('')}</div>`:''}
+        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('yoy','what_now'))}</div></div>
+      </div>
+    </div>`;
+
+  const container=document.getElementById('results-container');
+  container.innerHTML=`
+    <div class="r-header">
+      <div class="r-headline">${esc(narrative.headline||'Analysis complete')}</div>
+      <div class="r-meta">
+        <span>${esc(metricCol)}</span>
+        <span>${Y.length} periods${stats.date_range?` · ${stats.date_range[0]} – ${stats.date_range[1]}`:''}</span>
+        <span>5 modules</span>
+        <span>Local stats + Claude narrative</span>
+      </div>
+    </div>
+    ${trendHTML}${seasonHTML}${corrHTML}${anomHTML}${yoyHTML}`;
+
+  show('sec-results');
+
+  // Initialize charts after DOM settles
+  setTimeout(()=>{
+    // Trend chart
+    const tc=document.getElementById('chart-trend');
+    if(tc){
+      const fitted=T.map(t=>trend.slope*t+trend.intercept);
+      chartRegistry.push(new Chart(tc,{type:'line',data:{labels:dates,datasets:[{label:metricCol,data:Y,borderColor:'#6c63ff',borderWidth:2,pointRadius:3,tension:.35,fill:false},{label:'trend',data:fitted,borderColor:'rgba(0,212,168,0.6)',borderWidth:1.5,borderDash:[5,3],pointRadius:0,fill:false}]},options:chartOpts()}));
+    }
+    // Seasonal chart
+    const sc=document.getElementById('chart-season');
+    if(sc&&si_entries.length){
+      const sis=Object.entries(si_data).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
+      const siVals=sis.map(([,v])=>v);
+      chartRegistry.push(new Chart(sc,{type:'bar',data:{labels:sis.map(([m])=>months_en[parseInt(m)-1]),datasets:[{label:'seasonal index',data:siVals,backgroundColor:siVals.map(v=>v>1?'rgba(0,212,168,0.6)':'rgba(255,107,107,0.5)'),borderRadius:4}]},options:{...chartOpts(),plugins:{legend:{display:false}},scales:{...chartOpts().scales,y:{...chartOpts().scales.y,ticks:{...chartOpts().scales.y.ticks,callback:v=>`${(v*100).toFixed(0)}%`}}}}}));
+    }
+  },150);
+}
+
+function chartOpts(){
+  return{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,labels:{color:'#4a4862',font:{size:10},boxWidth:10,padding:12}}},scales:{x:{ticks:{color:'#4a4862',font:{size:10},maxTicksLimit:12},grid:{color:'rgba(255,255,255,0.03)'}},y:{ticks:{color:'#4a4862',font:{size:10}},grid:{color:'rgba(255,255,255,0.03)'}}}};
+}
+
+function renderError(msg){
+  document.getElementById('results-container').innerHTML=`<div style="background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.2);border-radius:9px;padding:18px 22px;font-family:var(--mono);font-size:13px;color:var(--red)">Analysis error: ${esc(msg)}<br><button class="btn btn-g" onclick="resetAll()" style="margin-top:12px;font-size:12px">Try again</button></div>`;
+  show('sec-results');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  UI UTILITIES
+// ═══════════════════════════════════════════════════════════════════════════
+function show(id){const el=document.getElementById(id);el.classList.remove('hidden');setTimeout(()=>{el.scrollIntoView({behavior:'smooth',block:'start'});},80);}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function toggleTestMode(){const t=document.getElementById('sec-test');if(t.classList.contains('hidden')){show('sec-test');runTests();}else{t.classList.add('hidden');}}
+function resetAll(){
+  parsedData=null;detectedCols=null;ctx.goal=null;
+  ['sec-ctx','sec-run','sec-results','sec-test'].forEach(id=>document.getElementById(id).classList.add('hidden'));
+  document.getElementById('schema-wrap').classList.add('hidden');
+  document.getElementById('results-container').innerHTML='';
+  document.getElementById('paste-area').value='';
+  document.getElementById('metric-inp').value='';
+  document.getElementById('focus-inp').value='';
+  document.querySelectorAll('.q-opt').forEach(o=>o.classList.remove('on'));
+  chartRegistry.forEach(c=>c.destroy());chartRegistry.length=0;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+</script>
+</body>
+</html>
