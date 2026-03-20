@@ -653,7 +653,7 @@ async function runAnalysis(){
     const statsPayload={
       metric:metricCol,n:Y.length,date_range:dateCol?[dates[0],dates[dates.length-1]]:null,
       trend:{slope:+trend.slope.toFixed(2),r2:+trend.r2.toFixed(4),p_value:+trend.pval.toFixed(4),direction:trend.slope>0?'increasing':'decreasing'},
-      seasonal:si_data?{peak:Object.entries(si_data).sort((a,b)=>b[1]-a[1])[0]:null,trough:Object.entries(si_data).sort((a,b)=>a[1]-b[1])[0]:null,amplitude:si_data?+(((Math.max(...Object.values(si_data))-Math.min(...Object.values(si_data)))/2*100).toFixed(1)):null}:null,
+      seasonal:si_data?{peak:(Object.entries(si_data).sort((a,b)=>b[1]-a[1])[0]||null),trough:(Object.entries(si_data).sort((a,b)=>a[1]-b[1])[0]||null),amplitude:(si_data?+(((Math.max(...Object.values(si_data))-Math.min(...Object.values(si_data)))/2*100).toFixed(1)):null)}:null,
       correlations:pearsonPairs.slice(0,4).map(p=>({name:p.name,r:+p.r.toFixed(4),p:+p.p.toFixed(5)})),
       ols:ols?{r2:+ols.r2.toFixed(4),adj_r2:+ols.adjR2.toFixed(4),predictors:pearsonPairs.slice(0,2).map((p,i)=>({name:p.name,coeff:+ols.coeffs[i+1].toFixed(4),p_value:+ols.pvals[i+1].toFixed(5)})),trend_coeff:+ols.coeffs[ols.coeffs.length-1].toFixed(2)}:null,
       anomalies:anom.outliers.map(o=>({date:o.date,value:+o.value.toFixed(0),z:o.z,direction:o.direction})),
@@ -969,7 +969,7 @@ function changeKey() {
   const sub = document.getElementById('key-sub');
   localStorage.removeItem(KEY_LS);
   banner.classList.remove('ok');
-  icon.textContent = '\u{1F511}';
+  icon.textContent = '🔑';
   icon.style.background = 'rgba(245,166,35,.12)';
   title.textContent = 'Anthropic API key required for AI narratives';
   sub.textContent = 'Stats run locally \u2014 key is only used to generate plain-English explanations. Saved to your browser only, never transmitted anywhere else.';
