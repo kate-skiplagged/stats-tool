@@ -416,14 +416,19 @@ const Stats = (() => {
   function seasonalIndex(dates, values) {
     const buckets={};
     dates.forEach((d,i)=>{
+      if(!d||typeof d!=='string'||d.length<7) return;
       const m=parseInt(d.slice(5,7));
+      if(isNaN(m)||m<1||m>12) return;
       if(!buckets[m]) buckets[m]=[];
       buckets[m].push(values[i]);
     });
     const mn=mean(values);
     const si={};
-    for(const m in buckets) si[parseInt(m)]=mean(buckets[m])/mn;
-    return si;
+    for(const m in buckets){
+      const mi=parseInt(m);
+      if(!isNaN(mi)&&mi>=1&&mi<=12) si[mi]=mean(buckets[m])/mn;
+    }
+    return Object.keys(si).length>0?si:null;
   }
 
   // ── Anomaly detection (IQR + z-score) ────────────────────────────────────
@@ -465,14 +470,18 @@ const Stats = (() => {
 
 // ── Date normalization — handles YYYY-MM, YYYY-MM-DD, YYYYMMDD ───────────────
 function normalizeDate(d) {
+  if(d===null||d===undefined||d==='') return null;
   const s = String(d).trim();
+  if(!s||s.startsWith('#')) return null;
   // YYYYMMDD → YYYY-MM
   if (/^\d{8}$/.test(s)) return s.slice(0,4) + '-' + s.slice(4,6);
   // YYYY-MM-DD or YYYY/MM/DD → YYYY-MM
   if (/^\d{4}[-\/]\d{2}[-\/]\d{2}/.test(s)) return s.slice(0,7).replace('/','-');
   // YYYY-MM already
   if (/^\d{4}-\d{2}$/.test(s)) return s;
-  return s.slice(0,7);
+  // YYYYMM (6 digits)
+  if (/^\d{6}$/.test(s)) return s.slice(0,4) + '-' + s.slice(4,6);
+  return null; // unparseable — caller must guard
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -581,7 +590,19 @@ function handleFile(f){Papa.parse(f,{header:true,dynamicTyping:true,skipEmptyLin
 function loadPaste(){const raw=document.getElementById('paste-area').value.trim();if(!raw)return;Papa.parse(raw,{header:true,dynamicTyping:true,skipEmptyLines:true,complete:r=>{ingestData(r.data,r.meta.fields,'pasted data');}});}
 function loadDemo(){ingestData(GT.raw.dates.map((d,i)=>({date:d,sessions:GT.raw.sessions[i],bookings:GT.raw.bookings[i],service_fee_revenue:GT.raw.revenue[i],hc_bookings:GT.raw.hc_bookings[i]})),['date','sessions','bookings','service_fee_revenue','hc_bookings'],'Skiplagged actuals 2023-01 to 2024-07');}
 
-function ingestData(data,fields,name){
+function ingestData(rawData,fields,name){
+  // Strip GA export metadata rows (blank dates, comment rows, duplicate headers)
+  const data = rawData.filter(row=>{
+    const vals = Object.values(row);
+    const hasData = vals.some(v=>v!==null&&v!==''&&v!==undefined);
+    if(!hasData) return false;
+    // Drop rows where every value is a string starting with '#'
+    const allComment = vals.every(v=>v===null||v===''||String(v).startsWith('#'));
+    if(allComment) return false;
+    // Drop rows that look like a re-header (first value matches a field name)
+    if(fields&&fields.includes(String(vals[0]))) return false;
+    return true;
+  });
   parsedData=data;
   detectedCols=inferCols(data,fields);
   showSchema(name,data.length);
@@ -656,8 +677,8 @@ async function runAnalysis(){
 
       parsedData.forEach(row=>{
         const rawDate = String(row[dateCol]||'').trim();
-        const mo = normalizeDate(rawDate); // normalize to YYYY-MM
-        if(!mo||mo.length<7) return;
+        const mo = normalizeDate(rawDate);
+        if(!mo||mo.length<7) return; // skip malformed/metadata rows
         const v = toNum(row[metricCol]);
         if(isNaN(v)) return;
         monthMetric[mo] = (monthMetric[mo]||0) + v;
@@ -840,7 +861,7 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,pearsonPairs,ols
         <div><div class="mod-title">Seasonality</div><div class="mod-subtitle">Monthly index — how much each month deviates from annual average</div></div>
       </div>
       <div class="mod-body">
-        ${si_entries.length?`<div class="stats-row">${[...si_entries].slice(0,4).sort((a,b)=>b[1]-a[1]).map(([m,v])=>`<div class="stat-c"><div class="stat-lbl">${months_en[parseInt(m)-1]}</div><div class="stat-val ${v>1?'pos':v<0.95?'neg':'neu'}">${(v*100).toFixed(1)}%</div></div>`).join('')}</div>`:''}
+        ${si_entries.length?`<div class="stats-row">${[...si_entries].filter(([m])=>{const mi=parseInt(m);return mi>=1&&mi<=12;}).slice(0,4).sort((a,b)=>b[1]-a[1]).map(([m,v])=>`<div class="stat-c"><div class="stat-lbl">${months_en[parseInt(m)-1]}</div><div class="stat-val ${v>1?'pos':v<0.95?'neg':'neu'}">${(v*100).toFixed(1)}%</div></div>`).join('')}</div>`:''}
         <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('seasonality','plain_english')||'No date column detected — seasonal analysis requires a date column.')}</div></div>
         ${si_entries.length?`<div class="chart-wrap"><canvas id="chart-season"></canvas></div>`:''}
         <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('seasonality','what_now'))}</div></div>
@@ -849,7 +870,7 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,pearsonPairs,ols
     </div>`;
 
   // ── Module 3: Correlations + OLS ─────────────────────────────────────────
-  const maxR=Math.max(...pearsonPairs.map(p=>Math.abs(p.r)));
+  const maxR=pearsonPairs.length?Math.max(...pearsonPairs.map(p=>Math.abs(p.r))):1;
   const corrHTML=`
     <div class="mod-card">
       <div class="mod-head">
@@ -954,7 +975,7 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,pearsonPairs,ols
     if(sc&&si_entries.length){
       const sis=Object.entries(si_data).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
       const siVals=sis.map(([,v])=>v);
-      chartRegistry.push(new Chart(sc,{type:'bar',data:{labels:sis.map(([m])=>months_en[parseInt(m)-1]),datasets:[{label:'seasonal index',data:siVals,backgroundColor:siVals.map(v=>v>1?'rgba(0,212,168,0.6)':'rgba(255,107,107,0.5)'),borderRadius:4}]},options:{...chartOpts(),plugins:{legend:{display:false}},scales:{...chartOpts().scales,y:{...chartOpts().scales.y,ticks:{...chartOpts().scales.y.ticks,callback:v=>`${(v*100).toFixed(0)}%`}}}}}));
+      chartRegistry.push(new Chart(sc,{type:'bar',data:{labels:sis.map(([m])=>{const mi=parseInt(m);return(mi>=1&&mi<=12)?months_en[mi-1]:String(m);}),datasets:[{label:'seasonal index',data:siVals,backgroundColor:siVals.map(v=>v>1?'rgba(0,212,168,0.6)':'rgba(255,107,107,0.5)'),borderRadius:4}]},options:{...chartOpts(),plugins:{legend:{display:false}},scales:{...chartOpts().scales,y:{...chartOpts().scales.y,ticks:{...chartOpts().scales.y.ticks,callback:v=>`${(v*100).toFixed(0)}%`}}}}}));
     }
   },150);
   } catch(err) {
