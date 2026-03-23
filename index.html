@@ -284,7 +284,7 @@ textarea:focus{border-color:var(--accent);}
     <div class="q-block" style="margin-top:14px; background:var(--surface2); padding:12px 14px; border-radius:8px; border:1px solid var(--bb);">
       <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text);">
         <input type="checkbox" id="use-ga-ann" checked style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;">
-        Include GA Annotations (Product launches, tests, outages)
+        Include GA Annotations & External Market Events
       </label>
     </div>
 
@@ -610,7 +610,6 @@ document.getElementById('fi').addEventListener('change',e=>{if(e.target.files[0]
 
 function handleFile(f){Papa.parse(f,{header:true,dynamicTyping:true,skipEmptyLines:true,worker:true,complete:r=>{ingestData(r.data,r.meta.fields,f.name);}});}
 function loadPaste(){const raw=document.getElementById('paste-area').value.trim();if(!raw)return;Papa.parse(raw,{header:true,dynamicTyping:true,skipEmptyLines:true,worker:true,complete:r=>{ingestData(r.data,r.meta.fields,'pasted data');}});}
-function loadDemo(){ingestData(GT.raw.dates.map((d,i)=>({date:d,sessions:GT.raw.sessions[i],bookings:GT.raw.bookings[i],service_fee_revenue:GT.raw.revenue[i],hc_bookings:GT.raw.hc_bookings[i]})),['date','sessions','bookings','service_fee_revenue','hc_bookings'],'Skiplagged actuals 2023-01 to 2024-07');}
 
 function ingestData(rawData,fields,name){
   const data = rawData.filter(row=>{
@@ -947,7 +946,7 @@ async function runAnalysis(){
       grain,
       comp_mode:compMode,
       ga_annotations: ctx.use_ga ? GA_ANNOTATIONS : null,
-      context:`Skiplagged.com — flight search with hidden-city ticketing. Data grain: ${grain}. Comparison mode: ${compMode}. ${ctx.focus||''}`
+      context:`Skiplagged.com — flight search with hidden-city ticketing. We are a marketplace and do not set prices; we are subject to macro airline market forces. Data grain: ${grain}. Comparison mode: ${compMode}. ${ctx.focus||''}`
     };
 
     adv();
@@ -1013,7 +1012,7 @@ Return ONLY valid JSON (no markdown, no preamble):
     },
     {
       "id": "anomalies",
-      "plain_english": "2-3 sentences about outliers or unusual periods. Reference any known business events (GA annotations) provided if they explain the anomaly. If no anomalies, explain what that means for the business.",
+      "plain_english": "2-3 sentences about outliers or unusual periods. Reference any known internal business events (GA annotations) provided OR use your knowledge of major real-world events (e.g., severe weather, airline IT outages, geopolitical conflicts, macroeconomic shifts) around these dates that impact global air travel. If no anomalies, explain what that means.",
       "what_now": "One concrete action."
     },
     {
