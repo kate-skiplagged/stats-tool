@@ -667,6 +667,7 @@ function runTests() {
 //  ANALYSIS RUNNER — stats locally, narrative via Claude API
 // ═══════════════════════════════════════════════════════════════════════════
 let parsedData=null, detectedCols=null;
+// Fix: removed the specific metric reference below
 const ctx={goal:null,comp:'yoy',metric:'',focus:''};
 
 // File handling
@@ -765,7 +766,6 @@ function pick(el,group,val){
 }
 
 async function runAnalysis(){
- /* ctx.metric=document.getElementById('metric-inp').value;*/
   ctx.focus=document.getElementById('focus-inp').value;
   if(!ctx.comp) ctx.comp='yoy';
   if(!parsedData||!parsedData.length){alert('Upload a dataset first.');return;}
@@ -853,6 +853,42 @@ async function runAnalysis(){
 
     await sleep(600); adv();
 
+    // ── CHANNEL / MARKETING LOGIC ──
+    let channel_breakdown = null;
+    if (ctx.goal === 'channels') {
+      const dimCols = detectedCols.filter(c => c.role === 'dim').map(c => c.name);
+      // prioritize column names that sound like channels, fallback to first available dimension
+      let targetDim = dimCols.find(c => /channel|source|medium|campaign/i.test(c)) || dimCols[0];
+      
+      if (targetDim) {
+        const chTotals = {};
+        let grandTotal = 0;
+        parsedData.forEach(row => {
+          const k = String(row[targetDim] || 'Unknown').trim();
+          const v = toNum(row[metricCol]);
+          if (!isNaN(v)) {
+            chTotals[k] = (chTotals[k] || 0) + v;
+            grandTotal += v;
+          }
+        });
+        const sortedCh = Object.entries(chTotals)
+                               .sort((a,b) => b[1] - a[1])
+                               .slice(0, 10);
+        
+        if (grandTotal > 0 && sortedCh.length > 0) {
+          channel_breakdown = {
+            dimension_name: targetDim,
+            total_volume: +grandTotal.toFixed(2),
+            data: sortedCh.map(([name, val]) => ({
+              name,
+              value: +val.toFixed(2),
+              share_pct: +((val / grandTotal) * 100).toFixed(1)
+            }))
+          };
+        }
+      }
+    }
+
     // ── 3. Core statistics ───────────────────────────────────────────────────
     const trend=Stats.linReg(T,Y);
 
@@ -894,6 +930,7 @@ async function runAnalysis(){
       stats:{mean:+((desc.mean??0).toFixed(2)),std:+((desc.std??0).toFixed(2)),min:+((desc.min??0).toFixed(2)),max:+((desc.max??0).toFixed(2))},
       yoy:yoy_data.slice(-8).map(y=>({date:y.date,pct:+((y.pct??y.yoy??0).toFixed(2))})),
       goal:ctx.goal||'general',
+      channel_breakdown,
       grain,
       comp_mode:compMode,
       context:`Skiplagged.com — flight search with hidden-city ticketing. Revenue: direct booking service fees + affiliate/referral fees. Data grain: ${grain}. Comparison mode: ${compMode}. ${ctx.focus||''}`
@@ -954,6 +991,12 @@ Return ONLY valid JSON (no markdown, no preamble):
       "plain_english": "2-3 sentences about year-over-year trajectory with specific percentages.",
       "what_now": "One concrete action."
     }
+    ${statsPayload.goal === 'channels' && statsPayload.channel_breakdown ? `,
+    {
+      "id": "channels",
+      "plain_english": "2-3 sentences summarizing the acquisition mix. Which channel dominates? Is there a concentration risk? Provide strategic insights for a marketer.",
+      "what_now": "One concrete marketing action based on the channel split."
+    }` : ''}
   ]
 }`;
 
@@ -1100,18 +1143,62 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,pearsonPairs,ols
       </div>
     </div>`;
 
+  // ── Module 6: Channels / Marketing ───────────────────────────────────────
+  let channelsHTML = '';
+  const chMod = narrative.modules?.find(m => m.id === 'channels');
+  
+  if (chMod && stats.channel_breakdown && stats.channel_breakdown.data.length > 0) {
+    const maxShare = stats.channel_breakdown.data[0].share_pct;
+    const topChName = stats.channel_breakdown.data[0].name;
+    const isConcentrated = maxShare > 50;
+
+    channelsHTML = `
+    <div class="mod-card" id="mc-channels">
+      <div class="mod-head">
+        <div class="mod-ic">⑆</div>
+        <div><div class="mod-title">Acquisition Mix</div><div class="mod-subtitle">Split by ${esc(stats.channel_breakdown.dimension_name)}</div></div>
+      </div>
+      <div class="mod-body">
+        <div class="stats-row">
+          <div class="stat-c"><div class="stat-lbl">Top Channel</div><div class="stat-val ${isConcentrated ? 'warn' : 'pos'}">${esc(topChName)}</div></div>
+          <div class="stat-c"><div class="stat-lbl">Share</div><div class="stat-val ${isConcentrated ? 'warn' : 'pos'}">${maxShare}%</div></div>
+        </div>
+        <div class="plain-box"><div class="plain-lbl">Channel Insights</div><div class="plain-txt">${esc(chMod.plain_english)}</div></div>
+        
+        <div style="margin-bottom:24px">
+          ${stats.channel_breakdown.data.map((ch, idx) => {
+            // cycle through Skiplagged colors for visual differentiation
+            const colors = ['#2A52D8', '#40C18D', '#FFB800', '#F8414C', '#A5AAB3'];
+            const barColor = colors[idx % colors.length];
+            return `
+            <div class="driver-row" style="grid-template-columns: 100px 1fr 60px 80px;">
+              <span class="d-lbl" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(ch.name)}</span>
+              <div class="bar-w"><div class="bar-f" style="width:${(ch.share_pct/maxShare)*100}%;background:${barColor}"></div></div>
+              <span class="d-val" style="color:var(--text); text-align: right;">${ch.share_pct}%</span>
+              <span class="d-sig">${fmt(ch.value)}</span>
+            </div>
+            `;
+          }).join('')}
+        </div>
+        
+        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(chMod.what_now)}</div></div>
+        <div class="tech-row"><span class="tech-tag">Volume Distribution</span><span class="tech-tag">Overall Vol: ${fmt(stats.channel_breakdown.total_volume)}</span></div>
+      </div>
+    </div>`;
+  }
+
   const container=document.getElementById('results-container');
+  // Add channelsHTML at the top if the user selected that specific goal
   container.innerHTML=`
     <div class="r-header">
       <div class="r-headline">${esc(narrative.headline||'Analysis complete')}</div>
       <div class="r-meta">
         <span>${esc(metricCol)}</span>
         <span>${Y.length} periods${stats.date_range?` · ${stats.date_range[0]} – ${stats.date_range[1]}`:''}</span>
-        <span>5 modules</span>
         <span>Local stats + Claude narrative</span>
       </div>
     </div>
-    ${trendHTML}${seasonHTML}${corrHTML}${anomHTML}${yoyHTML}`;
+    ${channelsHTML}${trendHTML}${seasonHTML}${corrHTML}${anomHTML}${yoyHTML}`;
 
   show('sec-results');
 
@@ -1185,7 +1272,6 @@ function resetAll(){
   ctx.metric='';
   document.getElementById('results-container').innerHTML='';
   document.getElementById('paste-area').value='';
- /* document.getElementById('metric-inp').value=''; */
   document.getElementById('focus-inp').value='';
   document.querySelectorAll('.q-opt').forEach(o=>o.classList.remove('on'));
   ctx.comp='yoy';
@@ -1252,7 +1338,6 @@ function changeKey() {
 
 // Run on load
 initKeyBanner();
-
 
 </script>
 </body>
