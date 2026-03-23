@@ -1,1700 +1,811 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Skiplagged — Statistical Analysis Engine</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;600;700;800&display=swap');
-
-    :root {
-      --bg: #0C0D0E;
-      --surface: #171A1A;
-      --surface2: #212727;
-      --surface3: #2D3434;
-      --border: rgba(255, 255, 255, 0.07);
-      --bb: rgba(255, 255, 255, 0.13);
-      --accent: #2A52D8;
-      --teal: #40C18D;
-      --red: #F8414C;
-      --amber: #FFB800;
-      --text: #F6F7F9;
-      --muted: #A5AAB3;
-      --dim: #7B8B8E;
-      --mono: 'DM Mono', monospace;
-      --sans: 'Syne', sans-serif;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--sans);
-      min-height: 100vh;
-      overflow-x: hidden;
-    }
-
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background-image: linear-gradient(rgba(42, 82, 216, 0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(42, 82, 216, 0.025) 1px, transparent 1px);
-      background-size: 48px 48px;
-      pointer-events: none;
-      z-index: 0;
-    }
-
-    .app {
-      position: relative;
-      z-index: 1;
-      max-width: 980px;
-      margin: 0 auto;
-      padding: 48px 24px 80px;
-    }
-
-    /* ── Header ── */
-    .logo-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 40px;
-    }
-
-    .logo-mark {
-      width: 36px;
-      height: 36px;
-      background: var(--accent);
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      font-weight: 800;
-      color: white;
-      flex-shrink: 0;
-    }
-
-    .logo-text {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--muted);
-      letter-spacing: .1em;
-    }
-
-    h1 {
-      font-size: clamp(28px, 5vw, 46px);
-      font-weight: 800;
-      line-height: 1.05;
-      letter-spacing: -.03em;
-      margin-bottom: 12px;
-    }
-
-    h1 em {
-      font-style: normal;
-      color: var(--accent);
-    }
-
-    .hero-sub {
-      font-family: var(--mono);
-      font-size: 13px;
-      color: var(--muted);
-      line-height: 1.7;
-      max-width: 540px;
-    }
-
-    /* ── Cards & sections ── */
-    .section {
-      margin-bottom: 36px;
-    }
-
-    .section-label {
-      font-family: var(--mono);
-      font-size: 10px;
-      letter-spacing: .18em;
-      color: var(--dim);
-      text-transform: uppercase;
-      margin-bottom: 10px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .section-num {
-      width: 20px;
-      height: 20px;
-      border: 1px solid var(--bb);
-      border-radius: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      color: var(--accent);
-    }
-
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 24px 28px;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .card::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, var(--accent), transparent);
-      opacity: .35;
-    }
-
-    .hidden {
-      display: none !important;
-    }
-
-    /* ── Upload ── */
-    .drop-zone {
-      border: 1.5px dashed var(--bb);
-      border-radius: 10px;
-      padding: 44px 32px;
-      text-align: center;
-      cursor: pointer;
-      transition: all .2s;
-      background: var(--surface2);
-    }
-
-    .drop-zone:hover,
-    .drop-zone.drag {
-      border-color: var(--accent);
-      background: rgba(42, 82, 216, 0.07);
-    }
-
-    .drop-icon {
-      width: 44px;
-      height: 44px;
-      margin: 0 auto 14px;
-      background: rgba(42, 82, 216, 0.14);
-      border-radius: 9px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
-    }
-
-    .drop-title {
-      font-size: 15px;
-      font-weight: 600;
-      margin-bottom: 5px;
-    }
-
-    .drop-sub {
-      font-size: 12px;
-      color: var(--muted);
-      font-family: var(--mono);
-    }
-
-    textarea {
-      width: 100%;
-      background: var(--surface2);
-      border: 1px solid var(--bb);
-      border-radius: 8px;
-      padding: 12px 14px;
-      color: var(--text);
-      font-family: var(--mono);
-      font-size: 12px;
-      resize: vertical;
-      min-height: 90px;
-      outline: none;
-      transition: border .15s;
-    }
-
-    textarea:focus {
-      border-color: var(--accent);
-    }
-
-    .schema-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-      gap: 8px;
-      margin-top: 14px;
-    }
-
-    .schema-item {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      padding: 9px 12px;
-    }
-
-    .sc-col {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--teal);
-      margin-bottom: 2px;
-    }
-
-    .sc-type {
-      font-size: 10px;
-      color: var(--dim);
-    }
-
-    .sc-sample {
-      font-size: 10px;
-      color: var(--muted);
-      margin-top: 2px;
-      font-family: var(--mono);
-    }
-
-    .file-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      background: rgba(64, 193, 141, .1);
-      border: 1px solid rgba(64, 193, 141, .2);
-      border-radius: 6px;
-      padding: 6px 12px;
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--teal);
-      margin-top: 12px;
-    }
-
-    .col-chip {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px 12px;
-      cursor: pointer;
-      transition: all .15s;
-      user-select: none;
-      position: relative;
-    }
-
-    .col-chip:hover {
-      border-color: var(--bb);
-    }
-
-    .col-chip.is-metric {
-      border-color: var(--accent);
-      background: rgba(42, 82, 216, .12);
-    }
-
-    .col-chip.is-date {
-      border-color: rgba(64, 193, 141, .5);
-      background: rgba(64, 193, 141, .08);
-    }
-
-    .col-chip.is-ignore {
-      opacity: .4;
-    }
-
-    .col-chip.is-ignore .sc-col {
-      color: var(--dim);
-    }
-
-    .col-role {
-      font-size: 9px;
-      font-weight: 500;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      margin-bottom: 4px;
-      font-family: var(--mono);
-    }
-
-    .col-role.role-metric {
-      color: var(--accent);
-    }
-
-    .col-role.role-date {
-      color: var(--teal);
-    }
-
-    .col-role.role-dim {
-      color: var(--dim);
-    }
-
-    .col-role.role-ignore {
-      color: var(--dim);
-    }
-
-    .col-actions {
-      display: flex;
-      gap: 4px;
-      margin-top: 7px;
-      flex-wrap: wrap;
-    }
-
-    .col-act {
-      font-size: 9px;
-      padding: 2px 7px;
-      border-radius: 4px;
-      border: 1px solid var(--border);
-      color: var(--dim);
-      cursor: pointer;
-      font-family: var(--mono);
-      background: transparent;
-      transition: all .12s;
-    }
-
-    .col-act:hover {
-      border-color: var(--bb);
-      color: var(--text);
-    }
-
-    .col-act.active-metric {
-      background: rgba(42, 82, 216, .2);
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    .col-act.active-date {
-      background: rgba(64, 193, 141, .15);
-      border-color: rgba(64, 193, 141, .5);
-      color: var(--teal);
-    }
-
-    .col-act.active-ignore {
-      background: rgba(123, 139, 142, .15);
-      border-color: var(--dim);
-      color: var(--dim);
-    }
-
-    /* ── Context ── */
-    .q-block {
-      margin-bottom: 18px;
-    }
-
-    .q-label {
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-
-    .q-opts {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 7px;
-    }
-
-    .q-opt {
-      padding: 6px 14px;
-      border: 1px solid var(--bb);
-      border-radius: 6px;
-      font-size: 12px;
-      font-family: var(--mono);
-      color: var(--muted);
-      cursor: pointer;
-      transition: all .15s;
-      background: var(--surface2);
-    }
-
-    .q-opt:hover {
-      border-color: var(--accent);
-      color: var(--text);
-    }
-
-    .q-opt.on {
-      border-color: var(--accent);
-      background: rgba(42, 82, 216, .15);
-      color: var(--text);
-    }
-
-    /* ── Buttons ── */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 11px 22px;
-      border-radius: 8px;
-      font-family: var(--sans);
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all .15s;
-      border: none;
-    }
-
-    .btn-p {
-      background: var(--accent);
-      color: #fff;
-    }
-
-    .btn-p:hover {
-      background: #2538C0;
-      transform: translateY(-1px);
-    }
-
-    .btn-p:disabled {
-      opacity: .35;
-      cursor: not-allowed;
-      transform: none;
-    }
-
-    .btn-g {
-      background: transparent;
-      color: var(--muted);
-      border: 1px solid var(--bb);
-    }
-
-    .btn-g:hover {
-      color: var(--text);
-      background: var(--surface2);
-    }
-
-    /* ── Running ── */
-    .pulse {
-      width: 56px;
-      height: 56px;
-      border-radius: 50%;
-      border: 2px solid var(--accent);
-      margin: 0 auto 20px;
-      position: relative;
-      animation: pr 1.5s ease-in-out infinite;
-    }
-
-    .pulse::after {
-      content: '';
-      position: absolute;
-      inset: 8px;
-      border-radius: 50%;
-      background: var(--accent);
-      opacity: .3;
-      animation: pi 1.5s ease-in-out infinite;
-    }
-
-    @keyframes pr {
-
-      0%,
-      100% {
-        transform: scale(1);
-        opacity: 1
-      }
-
-      50% {
-        transform: scale(1.1);
-        opacity: .7
-      }
-    }
-
-    @keyframes pi {
-
-      0%,
-      100% {
-        transform: scale(1)
-      }
-
-      50% {
-        transform: scale(1.2)
-      }
-    }
-
-    .prog-list {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-      margin-top: 20px;
-      text-align: left;
-    }
-
-    .prog-item {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--dim);
-      padding: 7px 11px;
-      border-radius: 6px;
-      transition: all .3s;
-    }
-
-    .prog-item.act {
-      color: var(--accent);
-      background: rgba(42, 82, 216, .08);
-    }
-
-    .prog-item.done {
-      color: var(--teal);
-    }
-
-    .prog-dot {
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      background: currentColor;
-      flex-shrink: 0;
-    }
-
-    .prog-item.act .prog-dot {
-      animation: blink .8s ease-in-out infinite;
-    }
-
-    @keyframes blink {
-
-      0%,
-      100% {
-        opacity: 1
-      }
-
-      50% {
-        opacity: .15
-      }
-    }
-
-    /* ── Results ── */
-    .r-header {
-      margin-bottom: 28px;
-    }
-
-    .r-headline {
-      font-size: 22px;
-      font-weight: 700;
-      margin-bottom: 8px;
-      line-height: 1.25;
-    }
-
-    .r-meta {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--muted);
-      display: flex;
-      gap: 16px;
-      flex-wrap: wrap;
-    }
-
-    .r-meta span {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .r-meta span::before {
-      content: '·';
-      color: var(--dim);
-    }
-
-    .r-meta span:first-child::before {
-      display: none;
-    }
-
-    .mod-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      margin-bottom: 18px;
-      overflow: hidden;
-    }
-
-    .mod-head {
-      padding: 18px 22px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: flex-start;
-      gap: 14px;
-    }
-
-    .mod-ic {
-      width: 30px;
-      height: 30px;
-      background: rgba(42, 82, 216, .14);
-      border: 1px solid rgba(42, 82, 216, .28);
-      border-radius: 7px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      color: var(--accent);
-      flex-shrink: 0;
-      font-family: var(--mono);
-      font-weight: 500;
-    }
-
-    .mod-title {
-      font-size: 15px;
-      font-weight: 700;
-      margin-bottom: 3px;
-    }
-
-    .mod-subtitle {
-      font-size: 12px;
-      color: var(--muted);
-    }
-
-    .mod-body {
-      padding: 20px 22px;
-    }
-
-    .stats-row {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-      gap: 10px;
-      margin-bottom: 20px;
-    }
-
-    .stat-c {
-      background: var(--surface2);
-      border-radius: 8px;
-      padding: 12px 14px;
-      border: 1px solid var(--border);
-    }
-
-    .stat-lbl {
-      font-family: var(--mono);
-      font-size: 9px;
-      color: var(--dim);
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      margin-bottom: 5px;
-    }
-
-    .stat-val {
-      font-size: 20px;
-      font-weight: 700;
-      line-height: 1;
-    }
-
-    .stat-val.pos {
-      color: var(--teal);
-    }
-
-    .stat-val.neg {
-      color: var(--red);
-    }
-
-    .stat-val.neu {
-      color: var(--accent);
-    }
-
-    .stat-val.warn {
-      color: var(--amber);
-    }
-
-    .plain-box {
-      background: linear-gradient(135deg, rgba(42, 82, 216, .08), rgba(64, 193, 141, .05));
-      border: 1px solid rgba(42, 82, 216, .18);
-      border-radius: 9px;
-      padding: 18px 20px;
-      margin-bottom: 18px;
-    }
-
-    .plain-lbl {
-      font-family: var(--mono);
-      font-size: 9px;
-      letter-spacing: .16em;
-      color: var(--accent);
-      text-transform: uppercase;
-      margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      gap: 7px;
-    }
-
-    .plain-lbl::before {
-      content: '';
-      width: 14px;
-      height: 1px;
-      background: var(--accent);
-    }
-
-    .plain-txt {
-      font-size: 14px;
-      line-height: 1.75;
-      color: var(--text);
-    }
-
-    .action-box {
-      background: rgba(64, 193, 141, .07);
-      border: 1px solid rgba(64, 193, 141, .18);
-      border-radius: 9px;
-      padding: 16px 20px;
-    }
-
-    .act-lbl {
-      font-family: var(--mono);
-      font-size: 9px;
-      letter-spacing: .16em;
-      color: var(--teal);
-      text-transform: uppercase;
-      margin-bottom: 7px;
-    }
-
-    .act-txt {
-      font-size: 13px;
-      line-height: 1.75;
-      color: var(--text);
-    }
-
-    .chart-wrap {
-      position: relative;
-      height: 210px;
-      margin-bottom: 18px;
-    }
-
-    .driver-row {
-      display: grid;
-      grid-template-columns: 150px 1fr 70px 80px;
-      gap: 10px;
-      align-items: center;
-      padding: 7px 0;
-      border-bottom: 1px solid var(--border);
-      font-size: 12px;
-    }
-
-    .driver-row:last-child {
-      border-bottom: none;
-    }
-
-    .d-lbl {
-      color: var(--muted);
-      font-family: var(--mono);
-      font-size: 11px;
-    }
-
-    .bar-w {
-      height: 5px;
-      background: var(--surface2);
-      border-radius: 3px;
-      overflow: hidden;
-    }
-
-    .bar-f {
-      height: 100%;
-      border-radius: 3px;
-    }
-
-    .d-val {
-      font-family: var(--mono);
-      font-weight: 500;
-      text-align: right;
-      font-size: 12px;
-    }
-
-    .d-sig {
-      font-family: var(--mono);
-      font-size: 10px;
-      text-align: right;
-      color: var(--dim);
-    }
-
-    .tech-row {
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--dim);
-      margin-top: 14px;
-      padding-top: 14px;
-      border-top: 1px solid var(--border);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-    }
-
-    .tech-tag {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 2px 7px;
-      font-size: 9px;
-    }
-
-    .sig-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
-      padding: 2px 7px;
-      border-radius: 8px;
-      font-size: 9px;
-      font-family: var(--mono);
-      font-weight: 500;
-    }
-
-    .sig-yes {
-      background: rgba(64, 193, 141, .12);
-      color: var(--teal);
-      border: 1px solid rgba(64, 193, 141, .2);
-    }
-
-    .sig-no {
-      background: rgba(123, 139, 142, .1);
-      color: var(--dim);
-      border: 1px solid var(--border);
-    }
-
-    .sig-warn {
-      background: rgba(255, 184, 0, .1);
-      color: var(--amber);
-      border: 1px solid rgba(255, 184, 0, .2);
-    }
-
-    /* ── Toast ── */
-    .toast {
-      position: fixed;
-      bottom: 30px;
-      left: 50%;
-      transform: translateX(-50%) translateY(20px);
-      background: var(--accent);
-      color: #fff;
-      padding: 12px 24px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 500;
-      opacity: 0;
-      pointer-events: none;
-      transition: all .3s ease;
-      z-index: 9999;
-      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
-    }
-
-    .toast.show {
-      transform: translateX(-50%) translateY(0);
-      opacity: 1;
-    }
-
-    /* ── PDF Export Styles ── */
-    @media print {
-      body {
-        background: #fff !important;
-        color: #000 !important;
-      }
-
-      .app {
-        padding: 0 !important;
-        max-width: 100% !important;
-        margin: 0 !important;
-      }
-
-      .section:not(#sec-results) {
-        display: none !important;
-      }
-
-      h1 {
-        font-size: 28px !important;
-        color: #000 !important;
-        margin-bottom: 0px !important;
-      }
-
-      .hero-sub {
-        display: none !important;
-      }
-
-      .logo-text {
-        color: #555 !important;
-      }
-
-      .mod-card {
-        break-inside: avoid;
-        border: 1px solid #e0e0e0 !important;
-        background: #fff !important;
-        margin-bottom: 24px !important;
-        box-shadow: none !important;
-        color: #000 !important;
-      }
-
-      .stat-c {
-        border-color: #eee !important;
-        background: #f9f9f9 !important;
-      }
-
-      .stat-lbl,
-      .d-lbl,
-      .d-sig,
-      .tech-tag {
-        color: #555 !important;
-      }
-
-      .plain-box {
-        background: #fdfdfd !important;
-        border: 1px solid #e0e0e0 !important;
-      }
-
-      .action-box {
-        background: #fdfdfd !important;
-        border: 1px solid #e0e0e0 !important;
-      }
-
-      .plain-txt,
-      .act-txt {
-        color: #222 !important;
-      }
-
-      .bar-w {
-        background: #eee !important;
-      }
-
-      .bar-f,
-      .mod-ic {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-      }
-
-      .no-print {
-        display: none !important;
-      }
-
-      canvas {
-        max-width: 100% !important;
-      }
-    }
-
-    /* ── API key banner ── */
-    #key-banner {
-      background: var(--surface);
-      border: 1px solid rgba(255, 184, 0, .25);
-      border-radius: 12px;
-      padding: 20px 24px;
-      margin-bottom: 32px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      flex-wrap: wrap;
-    }
-
-    #key-banner.ok {
-      border-color: rgba(64, 193, 141, .25);
-    }
-
-    .key-icon {
-      width: 34px;
-      height: 34px;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 16px;
-      flex-shrink: 0;
-      background: rgba(255, 184, 0, .12);
-    }
-
-    #key-banner.ok .key-icon {
-      background: rgba(64, 193, 141, .12);
-    }
-
-    .key-info {
-      flex: 1;
-      min-width: 180px;
-    }
-
-    .key-title {
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 3px;
-    }
-
-    .key-sub {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--muted);
-    }
-
-    .key-input-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    #key-input {
-      background: var(--surface2);
-      border: 1px solid var(--bb);
-      border-radius: 7px;
-      padding: 8px 12px;
-      color: var(--text);
-      font-family: var(--mono);
-      font-size: 12px;
-      outline: none;
-      width: 280px;
-      letter-spacing: .05em;
-      transition: border .15s;
-    }
-
-    #key-input:focus {
-      border-color: var(--accent);
-    }
-
-    .key-saved {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--teal);
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .key-change {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--dim);
-      cursor: pointer;
-      text-decoration: underline;
-      text-underline-offset: 3px;
-    }
-
-    /* ── Shared Banner ── */
-    .shared-banner {
-      background: rgba(42, 82, 216, .1);
-      border: 1px solid rgba(42, 82, 216, .3);
-      border-radius: 8px;
-      padding: 12px 20px;
-      margin-bottom: 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 13px;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skiplagged — Statistical Analysis Engine</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;600;700;800&display=swap');
+:root{--bg:#0C0D0E;--surface:#171A1A;--surface2:#212727;--surface3:#2D3434;--border:rgba(255,255,255,0.07);--bb:rgba(255,255,255,0.13);--accent:#2A52D8;--teal:#40C18D;--red:#F8414C;--amber:#FFB800;--text:#F6F7F9;--muted:#A5AAB3;--dim:#7B8B8E;--mono:'DM Mono',monospace;--sans:'Syne',sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(42,82,216,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(42,82,216,0.025) 1px,transparent 1px);background-size:48px 48px;pointer-events:none;z-index:0;}
+.app{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:48px 24px 80px;}
+
+/* ── Header ── */
+.logo-row{display:flex;align-items:center;gap:12px;margin-bottom:40px;}
+.logo-mark{width:36px;height:36px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:white;flex-shrink:0;}
+.logo-text{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.1em;}
+h1{font-size:clamp(28px,5vw,46px);font-weight:800;line-height:1.05;letter-spacing:-.03em;margin-bottom:12px;}
+h1 em{font-style:normal;color:var(--accent);}
+.hero-sub{font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;max-width:540px;}
+
+/* ── Cards & sections ── */
+.section{margin-bottom:36px;}
+.section-label{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--dim);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.section-num{width:20px;height:20px;border:1px solid var(--bb);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--accent);}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 28px;position:relative;overflow:hidden;}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.35;}
+.hidden{display:none!important;}
+
+/* ── Upload ── */
+.drop-zone{border:1.5px dashed var(--bb);border-radius:10px;padding:44px 32px;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface2);}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--accent);background:rgba(42,82,216,0.07);}
+.drop-icon{width:44px;height:44px;margin:0 auto 14px;background:rgba(42,82,216,0.14);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:20px;}
+.drop-title{font-size:15px;font-weight:600;margin-bottom:5px;}
+.drop-sub{font-size:12px;color:var(--muted);font-family:var(--mono);}
+textarea{width:100%;background:var(--surface2);border:1px solid var(--bb);border-radius:8px;padding:12px 14px;color:var(--text);font-family:var(--mono);font-size:12px;resize:vertical;min-height:90px;outline:none;transition:border .15s;}
+textarea:focus{border-color:var(--accent);}
+.schema-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-top:14px;}
+.schema-item{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:9px 12px;}
+.sc-col{font-family:var(--mono);font-size:11px;color:var(--teal);margin-bottom:2px;}
+.sc-type{font-size:10px;color:var(--dim);}
+.sc-sample{font-size:10px;color:var(--muted);margin-top:2px;font-family:var(--mono);}
+.file-chip{display:inline-flex;align-items:center;gap:7px;background:rgba(64,193,141,.1);border:1px solid rgba(64,193,141,.2);border-radius:6px;padding:6px 12px;font-family:var(--mono);font-size:12px;color:var(--teal);margin-top:12px;}
+.col-chip{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;cursor:pointer;transition:all .15s;user-select:none;position:relative;}
+.col-chip:hover{border-color:var(--bb);}
+.col-chip.is-metric{border-color:var(--accent);background:rgba(42,82,216,.12);}
+.col-chip.is-date{border-color:rgba(64,193,141,.5);background:rgba(64,193,141,.08);}
+.col-chip.is-ignore{opacity:.4;}
+.col-chip.is-ignore .sc-col{color:var(--dim);}
+.col-role{font-size:9px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px;font-family:var(--mono);}
+.col-role.role-metric{color:var(--accent);}
+.col-role.role-date{color:var(--teal);}
+.col-role.role-dim{color:var(--dim);}
+.col-role.role-ignore{color:var(--dim);}
+.col-actions{display:flex;gap:4px;margin-top:7px;flex-wrap:wrap;}
+.col-act{font-size:9px;padding:2px 7px;border-radius:4px;border:1px solid var(--border);color:var(--dim);cursor:pointer;font-family:var(--mono);background:transparent;transition:all .12s;}
+.col-act:hover{border-color:var(--bb);color:var(--text);}
+.col-act.active-metric{background:rgba(42,82,216,.2);border-color:var(--accent);color:var(--accent);}
+.col-act.active-date{background:rgba(64,193,141,.15);border-color:rgba(64,193,141,.5);color:var(--teal);}
+.col-act.active-ignore{background:rgba(123,139,142,.15);border-color:var(--dim);color:var(--dim);}
+
+/* ── Context ── */
+.q-block{margin-bottom:18px;}
+.q-label{font-size:13px;font-weight:600;margin-bottom:8px;}
+.q-opts{display:flex;flex-wrap:wrap;gap:7px;}
+.q-opt{padding:6px 14px;border:1px solid var(--bb);border-radius:6px;font-size:12px;font-family:var(--mono);color:var(--muted);cursor:pointer;transition:all .15s;background:var(--surface2);}
+.q-opt:hover{border-color:var(--accent);color:var(--text);}
+.q-opt.on{border-color:var(--accent);background:rgba(42,82,216,.15);color:var(--text);}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 22px;border-radius:8px;font-family:var(--sans);font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;border:none;}
+.btn-p{background:var(--accent);color:#fff;}.btn-p:hover{background:#2538C0;transform:translateY(-1px);}
+.btn-p:disabled{opacity:.35;cursor:not-allowed;transform:none;}
+.btn-g{background:transparent;color:var(--muted);border:1px solid var(--bb);}.btn-g:hover{color:var(--text);background:var(--surface2);}
+
+/* ── Running ── */
+.pulse{width:56px;height:56px;border-radius:50%;border:2px solid var(--accent);margin:0 auto 20px;position:relative;animation:pr 1.5s ease-in-out infinite;}
+.pulse::after{content:'';position:absolute;inset:8px;border-radius:50%;background:var(--accent);opacity:.3;animation:pi 1.5s ease-in-out infinite;}
+@keyframes pr{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.1);opacity:.7}}
+@keyframes pi{0%,100%{transform:scale(1)}50%{transform:scale(1.2)}}
+.prog-list{display:flex;flex-direction:column;gap:5px;margin-top:20px;text-align:left;}
+.prog-item{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11px;color:var(--dim);padding:7px 11px;border-radius:6px;transition:all .3s;}
+.prog-item.act{color:var(--accent);background:rgba(42,82,216,.08);}
+.prog-item.done{color:var(--teal);}
+.prog-dot{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0;}
+.prog-item.act .prog-dot{animation:blink .8s ease-in-out infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+
+/* ── Results ── */
+.r-header{margin-bottom:28px;}
+.r-headline{font-size:22px;font-weight:700;margin-bottom:8px;line-height:1.25;}
+.r-meta{font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;}
+.r-meta span{display:flex;align-items:center;gap:5px;}
+.r-meta span::before{content:'·';color:var(--dim);}
+.r-meta span:first-child::before{display:none;}
+
+.mod-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:18px;overflow:hidden;}
+.mod-head{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:14px;}
+.mod-ic{width:30px;height:30px;background:rgba(42,82,216,.14);border:1px solid rgba(42,82,216,.28);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--accent);flex-shrink:0;font-family:var(--mono);font-weight:500;}
+.mod-title{font-size:15px;font-weight:700;margin-bottom:3px;}
+.mod-subtitle{font-size:12px;color:var(--muted);}
+.mod-body{padding:20px 22px;}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:20px;}
+.stat-c{background:var(--surface2);border-radius:8px;padding:12px 14px;border:1px solid var(--border);}
+.stat-lbl{font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;}
+.stat-val{font-size:20px;font-weight:700;line-height:1;}
+.stat-val.pos{color:var(--teal);}
+.stat-val.neg{color:var(--red);}
+.stat-val.neu{color:var(--accent);}
+.stat-val.warn{color:var(--amber);}
+.plain-box{background:linear-gradient(135deg,rgba(42,82,216,.08),rgba(64,193,141,.05));border:1px solid rgba(42,82,216,.18);border-radius:9px;padding:18px 20px;margin-bottom:18px;}
+.plain-lbl{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--accent);text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:7px;}
+.plain-lbl::before{content:'';width:14px;height:1px;background:var(--accent);}
+.plain-txt{font-size:14px;line-height:1.75;color:var(--text);}
+.action-box{background:rgba(64,193,141,.07);border:1px solid rgba(64,193,141,.18);border-radius:9px;padding:16px 20px;}
+.act-lbl{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--teal);text-transform:uppercase;margin-bottom:7px;}
+.act-txt{font-size:13px;line-height:1.75;color:var(--text);}
+.chart-wrap{position:relative;height:210px;margin-bottom:18px;}
+.driver-row{display:grid;grid-template-columns:150px 1fr 70px 80px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;}
+.driver-row:last-child{border-bottom:none;}
+.d-lbl{color:var(--muted);font-family:var(--mono);font-size:11px;}
+.bar-w{height:5px;background:var(--surface2);border-radius:3px;overflow:hidden;}
+.bar-f{height:100%;border-radius:3px;}
+.d-val{font-family:var(--mono);font-weight:500;text-align:right;font-size:12px;}
+.d-sig{font-family:var(--mono);font-size:10px;text-align:right;color:var(--dim);}
+.tech-row{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:14px;padding-top:14px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:10px;align-items:center;}
+.tech-tag{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:9px;}
+.sig-pill{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:8px;font-size:9px;font-family:var(--mono);font-weight:500;}
+.sig-yes{background:rgba(64,193,141,.12);color:var(--teal);border:1px solid rgba(64,193,141,.2);}
+.sig-no{background:rgba(123,139,142,.1);color:var(--dim);border:1px solid var(--border);}
+.sig-warn{background:rgba(255,184,0,.1);color:var(--amber);border:1px solid rgba(255,184,0,.2);}
+
+/* ── Toast ── */
+.toast {position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--accent);color:#fff;padding:12px 24px;border-radius:8px;font-size:13px;font-weight:500;opacity:0;pointer-events:none;transition:all .3s ease;z-index:9999;box-shadow:0 10px 20px rgba(0,0,0,0.3);}
+.toast.show {transform:translateX(-50%) translateY(0);opacity:1;}
+
+/* ── PDF Export Styles ── */
+@media print {
+  body { background: #fff !important; color: #000 !important; }
+  .app { padding: 0 !important; max-width: 100% !important; margin: 0 !important; }
+  .section:not(#sec-results) { display: none !important; }
+  h1 { font-size: 28px !important; color: #000 !important; margin-bottom: 0px !important; }
+  .hero-sub { display: none !important; }
+  .logo-text { color: #555 !important; }
+  .mod-card { break-inside: avoid; border: 1px solid #e0e0e0 !important; background: #fff !important; margin-bottom: 24px !important; box-shadow: none !important; color: #000 !important; }
+  .stat-c { border-color: #eee !important; background: #f9f9f9 !important; }
+  .stat-lbl, .d-lbl, .d-sig, .tech-tag { color: #555 !important; }
+  .plain-box { background: #fdfdfd !important; border: 1px solid #e0e0e0 !important; }
+  .action-box { background: #fdfdfd !important; border: 1px solid #e0e0e0 !important; }
+  .plain-txt, .act-txt { color: #222 !important; }
+  .bar-w { background: #eee !important; }
+  .bar-f, .mod-ic { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  .no-print { display: none !important; }
+  canvas { max-width: 100% !important; }
+}
+
+/* ── Shared Banner ── */
+.shared-banner {background:rgba(42,82,216,.1);border:1px solid rgba(42,82,216,.3);border-radius:8px;padding:12px 20px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;font-size:13px;}
+</style>
 </head>
-
 <body>
-  <div class="app">
+<div class="app">
 
-    <div class="logo-row">
-      <div class="logo-mark">S</div>
-      <div class="logo-text">KB · STATISTICAL ANALYSIS ENGINE · v3.0</div>
-    </div>
+<div class="logo-row">
+  <div class="logo-mark">S</div>
+  <div class="logo-text">SKIPLAGGED · STATISTICAL ANALYSIS ENGINE · v2.0</div>
+</div>
 
-    <div id="toast" class="toast">Link copied to clipboard!</div>
+<div id="toast" class="toast">Link copied to clipboard!</div>
 
-    <div id="key-banner">
-      <div class="key-icon" id="key-icon">&#128273;</div>
-      <div class="key-info">
-        <div class="key-title" id="key-title">Anthropic API key required for AI narratives</div>
-        <div class="key-sub" id="key-sub">Stats run locally &#8212; key is only used to generate plain-English
-          explanations. Saved to your browser only, never transmitted anywhere else.</div>
-      </div>
-      <div id="key-input-row" class="key-input-row">
-        <input type="password" id="key-input" placeholder="sk-ant-api03-..." autocomplete="off"
-          onkeydown="if(event.key==='Enter')saveKey()">
-        <button class="btn btn-g" style="font-size:12px;padding:8px 14px" onclick="saveKey()">Save key</button>
-      </div>
-      <div id="key-saved-row" style="display:none;align-items:center;gap:12px">
-        <span class="key-saved">&#10003; Key saved</span>
-        <span class="key-change" onclick="changeKey()">change</span>
-      </div>
-    </div>
-
-    <div class="no-print" id="hero-text">
-      <h1>Find what's actually<br><em>driving your numbers</em></h1>
-      <p class="hero-sub" style="margin-bottom:48px">Upload a CSV. The engine runs local statistical models — trend,
-        seasonality, correlations, OLS regression, anomaly detection — then asks Claude to explain what it means in
-        plain English.</p>
-    </div>
-
-    <div class="section" id="sec-upload">
-      <div class="section-label"><span class="section-num">1</span>Upload your dataset</div>
-      <div class="card">
-        <div class="drop-zone" id="drop-zone" onclick="document.getElementById('fi').click()">
-          <div class="drop-icon">⬆</div>
-          <div class="drop-title">Drop a CSV file here</div>
-          <div class="drop-sub">or click to browse · CSV / TSV · up to 1MM rows</div>
-        </div>
-        <input type="file" id="fi" accept=".csv,.tsv,.txt" style="display:none">
-
-        <div style="margin-top:18px;padding-top:18px;border-top:1px solid var(--border);">
-          <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-bottom:8px;">OR PASTE CSV DATA
-          </div>
-          <textarea id="paste-area"
-            placeholder="date,sessions,bookings,revenue&#10;2024-01-01,3126610,58707,983199&#10;2024-02-01,3132901,60163,1042608"></textarea>
-          <button class="btn btn-g" style="margin-top:8px;font-size:12px" onclick="loadPaste()">Parse pasted data
-            →</button>
-        </div>
-
-        <div id="demo-row" style="margin-top:12px">
-          <button class="btn btn-g" style="font-size:11px;padding:7px 14px" onclick="loadDemo()">Load Skiplagged demo
-            data (19 months actuals)</button>
-        </div>
-
-        <div id="schema-wrap" class="hidden" style="margin-top:20px">
-          <div id="file-chip-el"></div>
-          <div id="row-count" style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:6px;"></div>
-          <div class="schema-grid" id="schema-cols"></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="section hidden" id="sec-ctx">
-      <div class="section-label"><span class="section-num">2</span>Business context</div>
-      <div class="card">
-        <div class="q-block">
-          <div class="q-label">What are you trying to answer?</div>
-          <div class="q-opts">
-            <div class="q-opt" onclick="pick(this,'goal','revenue')" data-v="revenue">What's driving revenue changes?
-            </div>
-            <div class="q-opt" onclick="pick(this,'goal','growth')" data-v="growth">Are we growing or declining?</div>
-            <div class="q-opt" onclick="pick(this,'goal','conversion')" data-v="conversion">What's our conversion
-              problem?</div>
-            <div class="q-opt" onclick="pick(this,'goal','seasonality')" data-v="seasonality">Is this seasonal or
-              structural?</div>
-            <div class="q-opt" onclick="pick(this,'goal','channels')" data-v="channels">Which channels are working?
-            </div>
-            <div class="q-opt" onclick="pick(this,'goal','feature')" data-v="feature">Did this feature move the needle?
-            </div>
-          </div>
-        </div>
-        <div class="q-block" style="margin-top:16px" id="metric-sel-block">
-          <div class="q-label">Primary outcome metric <span style="color:var(--dim);font-weight:400">(if multiple
-              metrics selected above, pick the main one)</span></div>
-          <div id="metric-select-opts" class="q-opts"></div>
-        </div>
-        <div class="q-block" style="margin-top:16px">
-          <div class="q-label">Comparison period — how should we measure change?</div>
-          <div class="q-opts">
-            <div class="q-opt" onclick="pick(this,'comp','wow')" data-v="wow">Week-over-week <span
-                style="font-size:10px;opacity:.6;margin-left:4px">same day of week</span></div>
-            <div class="q-opt" onclick="pick(this,'comp','mom')" data-v="mom">Month-over-month <span
-                style="font-size:10px;opacity:.6;margin-left:4px">28-day window</span></div>
-            <div class="q-opt on" onclick="pick(this,'comp','yoy')" data-v="yoy">Year-over-year <span
-                style="font-size:10px;opacity:.6;margin-left:4px">default</span></div>
-            <div class="q-opt" onclick="pick(this,'comp','auto')" data-v="auto">Auto-detect</div>
-          </div>
-        </div>
-        <div class="q-block" style="margin-top:14px">
-          <div class="q-label">Focus window or segment? <span style="color:var(--dim);font-weight:400">(optional)</span>
-          </div>
-          <textarea id="focus-inp" rows="2"
-            placeholder="e.g. 'last 4 weeks', 'US only', 'post-launch vs pre-launch'"></textarea>
-        </div>
-        <div style="margin-top:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <button class="btn btn-p" id="run-btn" onclick="runAnalysis()" disabled>Run analysis →</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="section hidden" id="sec-run">
-      <div class="card" style="text-align:center;padding:44px 24px">
-        <div class="pulse"></div>
-        <div style="font-family:var(--mono);font-size:12px;color:var(--accent);margin-bottom:6px" id="run-lbl">
-          Initializing…</div>
-        <div style="font-size:13px;color:var(--muted)">Running statistical engine on your dataset</div>
-        <div class="prog-list" id="prog-list"></div>
-      </div>
-    </div>
-
-    <div class="section hidden" id="sec-results">
-      <div id="results-container"></div>
-      <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap" class="no-print">
-        <button class="btn btn-g" onclick="resetAll()">New analysis</button>
-        <button class="btn btn-g" onclick="window.print()">Export to PDF</button>
-        <button class="btn btn-g" id="btn-share" onclick="generateShareLink()">Share Link</button>
-      </div>
-    </div>
-
+<div id="key-banner" class="no-print">
+  <div class="key-icon" id="key-icon">&#128273;</div>
+  <div class="key-info">
+    <div class="key-title" id="key-title">Anthropic API key required for AI narratives</div>
+    <div class="key-sub" id="key-sub">Stats run locally &#8212; key is only used to generate plain-English explanations. Saved to your browser only, never transmitted anywhere else.</div>
   </div>
-  <script>
+  <div id="key-input-row" class="key-input-row">
+    <input type="password" id="key-input" placeholder="sk-ant-api03-..." autocomplete="off" onkeydown="if(event.key==='Enter')saveKey()">
+    <button class="btn btn-g" style="font-size:12px;padding:8px 14px" onclick="saveKey()">Save key</button>
+  </div>
+  <div id="key-saved-row" style="display:none;align-items:center;gap:12px">
+    <span class="key-saved">&#10003; Key saved</span>
+    <span class="key-change" onclick="changeKey()">change</span>
+  </div>
+</div>
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  GROUND TRUTH DEMO DATA
-    // ═══════════════════════════════════════════════════════════════════════════
-    const GT = {
-      raw: {
-        dates: ["2023-01", "2023-02", "2023-03", "2023-04", "2023-05", "2023-06", "2023-07", "2023-08", "2023-09", "2023-10", "2023-11", "2023-12", "2024-01", "2024-02", "2024-03", "2024-04", "2024-05", "2024-06", "2024-07"],
-        revenue: [983199.11, 1042608.54, 1252437.49, 1263143.61, 1357003.54, 1276735.35, 1305253.15, 1288064.84, 1204049.94, 1228728.93, 1158186.18, 1084027.99, 1122514.63, 1065033.64, 1263761.6, 1231213.69, 1222374.27, 1256971.0, 1181850.87],
-        bookings: [58707, 60163, 71728, 71271, 73968, 70380, 67725, 70428, 67466, 68071, 64412, 58495, 60316, 58825, 69071, 69242, 69427, 67601, 64022],
-        sessions: [3126610, 3132901, 3735786, 3343418, 3443483, 3438516, 3412290, 3138559, 2719844, 2648019, 2710968, 2593457, 2857867, 2668053, 2837515, 2721224, 2780552, 2730050, 2505563],
-        hc_bookings: [16028, 15656, 17819, 18718, 19041, 16416, 19032, 20867, 20878, 21005, 20640, 20305, 22110, 19268, 22454, 22756, 21221, 23147, 22087]
+<div class="no-print" id="hero-text">
+  <h1>Find what's actually<br><em>driving your numbers</em></h1>
+  <p class="hero-sub" style="margin-bottom:48px">Upload a CSV. The engine runs local statistical models — trend, seasonality, correlations, OLS regression, anomaly detection — then asks Claude to explain what it means in plain English.</p>
+</div>
+
+<div class="section" id="sec-upload">
+  <div class="section-label"><span class="section-num">1</span>Upload your dataset</div>
+  <div class="card">
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('fi').click()">
+      <div class="drop-icon">⬆</div>
+      <div class="drop-title">Drop a CSV file here</div>
+      <div class="drop-sub">or click to browse · CSV / TSV · up to 1M rows</div>
+    </div>
+    <input type="file" id="fi" accept=".csv,.tsv,.txt" style="display:none">
+
+    <div style="margin-top:18px;padding-top:18px;border-top:1px solid var(--border);">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-bottom:8px;">OR PASTE CSV DATA</div>
+      <textarea id="paste-area" placeholder="date,sessions,bookings,revenue&#10;2024-01-01,3126610,58707,983199&#10;2024-02-01,3132901,60163,1042608"></textarea>
+      <button class="btn btn-g" style="margin-top:8px;font-size:12px" onclick="loadPaste()">Parse pasted data →</button>
+    </div>
+
+    <div id="demo-row" style="margin-top:12px">
+      <button class="btn btn-g" style="font-size:11px;padding:7px 14px" onclick="loadDemo()">Load Skiplagged demo data (19 months actuals)</button>
+    </div>
+
+    <div id="schema-wrap" class="hidden" style="margin-top:20px">
+      <div id="file-chip-el"></div>
+      <div id="row-count" style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:6px;"></div>
+      <div class="schema-grid" id="schema-cols"></div>
+    </div>
+  </div>
+</div>
+
+<div class="section hidden" id="sec-ctx">
+  <div class="section-label"><span class="section-num">2</span>Business context</div>
+  <div class="card">
+    <div class="q-block">
+      <div class="q-label">What are you trying to answer?</div>
+      <div class="q-opts">
+        <div class="q-opt" onclick="pick(this,'goal','revenue')" data-v="revenue">What's driving revenue changes?</div>
+        <div class="q-opt" onclick="pick(this,'goal','growth')" data-v="growth">Are we growing or declining?</div>
+        <div class="q-opt" onclick="pick(this,'goal','conversion')" data-v="conversion">What's our conversion problem?</div>
+        <div class="q-opt" onclick="pick(this,'goal','seasonality')" data-v="seasonality">Is this seasonal or structural?</div>
+        <div class="q-opt" onclick="pick(this,'goal','channels')" data-v="channels">Which channels are working?</div>
+        <div class="q-opt" onclick="pick(this,'goal','feature')" data-v="feature">Did this feature move the needle?</div>
+      </div>
+    </div>
+    <div class="q-block" style="margin-top:16px" id="metric-sel-block">
+      <div class="q-label">Primary outcome metric <span style="color:var(--dim);font-weight:400">(if multiple metrics selected above, pick the main one)</span></div>
+      <div id="metric-select-opts" class="q-opts"></div>
+    </div>
+    <div class="q-block" style="margin-top:16px">
+      <div class="q-label">Comparison period — how should we measure change?</div>
+      <div class="q-opts">
+        <div class="q-opt" onclick="pick(this,'comp','wow')" data-v="wow">Week-over-week <span style="font-size:10px;opacity:.6;margin-left:4px">same day of week</span></div>
+        <div class="q-opt" onclick="pick(this,'comp','mom')" data-v="mom">Month-over-month <span style="font-size:10px;opacity:.6;margin-left:4px">28-day window</span></div>
+        <div class="q-opt on" onclick="pick(this,'comp','yoy')" data-v="yoy">Year-over-year <span style="font-size:10px;opacity:.6;margin-left:4px">default</span></div>
+        <div class="q-opt" onclick="pick(this,'comp','auto')" data-v="auto">Auto-detect</div>
+      </div>
+    </div>
+    <div class="q-block" style="margin-top:14px">
+      <div class="q-label">Focus window or segment? <span style="color:var(--dim);font-weight:400">(optional)</span></div>
+      <textarea id="focus-inp" rows="2" placeholder="e.g. 'last 4 weeks', 'US only', 'post-launch vs pre-launch'"></textarea>
+    </div>
+    <div style="margin-top:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button class="btn btn-p" id="run-btn" onclick="runAnalysis()" disabled>Run analysis →</button>
+    </div>
+  </div>
+</div>
+
+<div class="section hidden" id="sec-run">
+  <div class="card" style="text-align:center;padding:44px 24px">
+    <div class="pulse"></div>
+    <div style="font-family:var(--mono);font-size:12px;color:var(--accent);margin-bottom:6px" id="run-lbl">Initializing…</div>
+    <div style="font-size:13px;color:var(--muted)">Running statistical engine on your dataset</div>
+    <div class="prog-list" id="prog-list"></div>
+  </div>
+</div>
+
+<div class="section hidden" id="sec-results">
+  <div id="results-container"></div>
+  <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap" class="no-print">
+    <button class="btn btn-g" onclick="resetAll()">New analysis</button>
+    <button class="btn btn-g" onclick="window.print()">Export to PDF</button>
+    <button class="btn btn-g" id="btn-share" onclick="generateShareLink()">Share Link</button>
+  </div>
+</div>
+
+</div><script>
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  GROUND TRUTH DEMO DATA
+// ═══════════════════════════════════════════════════════════════════════════
+const GT = {
+  raw: {
+    dates: ["2023-01","2023-02","2023-03","2023-04","2023-05","2023-06","2023-07","2023-08","2023-09","2023-10","2023-11","2023-12","2024-01","2024-02","2024-03","2024-04","2024-05","2024-06","2024-07"],
+    revenue: [983199.11,1042608.54,1252437.49,1263143.61,1357003.54,1276735.35,1305253.15,1288064.84,1204049.94,1228728.93,1158186.18,1084027.99,1122514.63,1065033.64,1263761.6,1231213.69,1222374.27,1256971.0,1181850.87],
+    bookings: [58707,60163,71728,71271,73968,70380,67725,70428,67466,68071,64412,58495,60316,58825,69071,69242,69427,67601,64022],
+    sessions: [3126610,3132901,3735786,3343418,3443483,3438516,3412290,3138559,2719844,2648019,2710968,2593457,2857867,2668053,2837515,2721224,2780552,2730050,2505563],
+    hc_bookings: [16028,15656,17819,18718,19041,16416,19032,20867,20878,21005,20640,20305,22110,19268,22454,22756,21221,23147,22087]
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  STATISTICS ENGINE
+// ═══════════════════════════════════════════════════════════════════════════
+const Stats = (() => {
+  function mean(a) { return a.reduce((s,v)=>s+v,0)/a.length; }
+  function variance(a) { const m=mean(a); return a.reduce((s,v)=>s+(v-m)**2,0)/(a.length-1); }
+  function stddev(a) { return Math.sqrt(variance(a)); }
+  function stddevPop(a) { const m=mean(a); return Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/a.length); }
+
+  function betainc(x, a, b) {
+    if (x < 0 || x > 1) return NaN;
+    if (x === 0) return 0;
+    if (x === 1) return 1;
+    const lbeta = lgamma(a) + lgamma(b) - lgamma(a+b);
+    const front = Math.exp(Math.log(x)*a + Math.log(1-x)*b - lbeta) / a;
+    return front * betacf(x, a, b);
+  }
+  function lgamma(z) {
+    const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5];
+    let y=z,tmp=z+5.5,ser=1.000000000190015;
+    tmp-=(z+0.5)*Math.log(tmp);
+    for(let i=0;i<6;i++) ser+=c[i]/++y;
+    return -tmp+Math.log(2.5066282746310005*ser/z);
+  }
+  function betacf(x, a, b) {
+    const MAXIT=200, EPS=3e-7;
+    let qab=a+b, qap=a+1, qam=a-1, c=1, d=1-qab*x/qap;
+    if(Math.abs(d)<1e-30) d=1e-30; d=1/d;
+    let h=d;
+    for(let m=1;m<=MAXIT;m++) {
+      const m2=2*m;
+      let aa=m*(b-m)*x/((qam+m2)*(a+m2));
+      d=1+aa*d; if(Math.abs(d)<1e-30) d=1e-30;
+      c=1+aa/c; if(Math.abs(c)<1e-30) c=1e-30;
+      d=1/d; h*=d*c;
+      aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));
+      d=1+aa*d; if(Math.abs(d)<1e-30) d=1e-30;
+      c=1+aa/c; if(Math.abs(c)<1e-30) c=1e-30;
+      d=1/d; const del=d*c; h*=del;
+      if(Math.abs(del-1)<EPS) break;
+    }
+    return h;
+  }
+  function tpval(t, df) {
+    const x = df/(df + t*t);
+    return betainc(x, df/2, 0.5);
+  }
+
+  function linReg(x, y) {
+    const n=x.length, mx=mean(x), my=mean(y);
+    let sxy=0,sxx=0;
+    for(let i=0;i<n;i++){sxy+=(x[i]-mx)*(y[i]-my);sxx+=(x[i]-mx)**2;}
+    const slope=sxy/sxx, intercept=my-slope*mx;
+    const yhat=x.map(v=>slope*v+intercept);
+    const ssres=y.reduce((s,v,i)=>s+(v-yhat[i])**2,0);
+    const sstot=y.reduce((s,v)=>s+(v-my)**2,0);
+    const r2=1-ssres/sstot;
+    const se=Math.sqrt(ssres/(n-2)/sxx);
+    const tstat=slope/se;
+    const pval=tpval(tstat, n-2);
+    return {slope,intercept,r2,r:Math.sqrt(r2)*Math.sign(slope),se,tstat,pval};
+  }
+
+  function pearson(x, y) {
+    const n=x.length, mx=mean(x), my=mean(y);
+    let sxy=0,sxx=0,syy=0;
+    for(let i=0;i<n;i++){const dx=x[i]-mx,dy=y[i]-my;sxy+=dx*dy;sxx+=dx*dx;syy+=dy*dy;}
+    const r=sxy/Math.sqrt(sxx*syy);
+    const tstat=r*Math.sqrt(n-2)/Math.sqrt(1-r*r);
+    return {r, pval: tpval(tstat, n-2)};
+  }
+
+  function olsMultiple(Xcols, y) {
+    const n=y.length, k=Xcols.length+1;
+    if(n<=k+1||!Xcols.length||Xcols.some(c=>!c||c.length!==n)) return null;
+    if(y.reduce((s,v)=>s+(v-y.reduce((a,b)=>a+b,0)/n)**2,0)===0) return null;
+    const X = y.map((_,i)=>[1,...Xcols.map(c=>c[i])]);
+    const Xt = X[0].map((_,j)=>X.map(row=>row[j]));
+    if(!Xt||!Xt[0]) return null;
+    const XtX = Xt.map(rowi=>Xt.map(rowj=>rowi.reduce((s,v,o)=>s+v*rowj[o],0)));
+    const Xty = Xt.map(rowi=>rowi.reduce((s,v,o)=>s+v*y[o],0));
+    const inv = invertMatrix([...XtX.map(r=>[...r])]);
+    if (!inv) return null;
+    const coeffs = inv.map(row=>row.reduce((s,v,i)=>s+v*Xty[i],0));
+    if(coeffs.some(c=>isNaN(c)||!isFinite(c))) return null;
+    const yhat = X.map(row=>row.reduce((s,v,i)=>s+v*coeffs[i],0));
+    const ssres = y.reduce((s,v,i)=>s+(v-yhat[i])**2,0);
+    const sstot = y.reduce((s,v)=>s+(v-y.reduce((a,b)=>a+b,0)/n)**2,0);
+    if(sstot===0||ssres<0) return null;
+    const r2 = 1-ssres/sstot;
+    const adjR2 = 1-(1-r2)*(n-1)/(n-k-1);
+    const mse = ssres/(n-k);
+    if(mse<=0) return null;
+    const seCoeffs = inv.map((row,i)=>Math.sqrt(mse*inv[i][i]));
+    if(seCoeffs.some(s=>isNaN(s)||!isFinite(s)||s<=0)) return null;
+    const tstats = coeffs.map((c,i)=>c/seCoeffs[i]);
+    const pvals = tstats.map(t=>tpval(t, n-k));
+    return {coeffs,r2,adjR2,seCoeffs,tstats,pvals,ssres,mse};
+  }
+  function invertMatrix(m) {
+    const n=m.length;
+    const I=m.map((_,i)=>m[0].map((_,j)=>i===j?1:0));
+    for(let i=0;i<n;i++){
+      let maxV=Math.abs(m[i][i]),maxR=i;
+      for(let r=i+1;r<n;r++) if(Math.abs(m[r][i])>maxV){maxV=Math.abs(m[r][i]);maxR=r;}
+      [m[i],m[maxR]]=[m[maxR],m[i]]; [I[i],I[maxR]]=[I[maxR],I[i]];
+      if(Math.abs(m[i][i])<1e-12) return null;
+      const d=m[i][i];
+      for(let j=0;j<n;j++){m[i][j]/=d;I[i][j]/=d;}
+      for(let r=0;r<n;r++){if(r===i) continue; const f=m[r][i]; for(let j=0;j<n;j++){m[r][j]-=f*m[i][j];I[r][j]-=f*I[i][j];}}
+    }
+    return I;
+  }
+
+  function seasonalIndex(dates, values) {
+    const buckets={};
+    dates.forEach((d,i)=>{
+      if(!d||typeof d!=='string'||d.length<7) return;
+      const m=parseInt(d.slice(5,7));
+      if(isNaN(m)||m<1||m>12) return;
+      if(!buckets[m]) buckets[m]=[];
+      buckets[m].push(values[i]);
+    });
+    const mn=mean(values);
+    const si={};
+    for(const m in buckets){
+      const mi=parseInt(m);
+      if(!isNaN(mi)&&mi>=1&&mi<=12) si[mi]=mean(buckets[m])/mn;
+    }
+    return Object.keys(si).length>0?si:null;
+  }
+
+  function anomalies(values, dates, zThresh=2.0) {
+    const sorted=[...values].sort((a,b)=>a-b);
+    const q1=sorted[Math.floor(sorted.length*0.25)];
+    const q3=sorted[Math.floor(sorted.length*0.75)];
+    const iqr=q3-q1, lo=q1-1.5*iqr, hi=q3+1.5*iqr;
+    const m=mean(values), s=stddevPop(values);
+    const out=values.map((v,i)=>{
+      const z=(v-m)/s;
+      const isOut=v<lo||v>hi||Math.abs(z)>zThresh;
+      return {date:dates[i],value:v,z:+z.toFixed(3),outlier:isOut,direction:v>m?'high':'low'};
+    }).filter(x=>x.outlier);
+    return {outliers:out,q1,q3,iqr,lo,hi,mean:m,std:s};
+  }
+
+  function detectGrain(dates) {
+    const sample = dates.filter(Boolean).slice(0, 20);
+    if (!sample.length) return 'month';
+    const dayCount = sample.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d) || /^\d{4}-W\d{2}-\d$/.test(d)).length;
+    if (dayCount / sample.length > 0.5) return 'day';
+    const weekCount = sample.filter(d => /^\d{4}-W\d{2}$/.test(d)).length;
+    if (weekCount / sample.length > 0.5) return 'week';
+    return 'month';
+  }
+
+  function periodGrowth(dates, values, mode) {
+    const grain = detectGrain(dates);
+    const map = {};
+    dates.forEach((d, i) => { if (d) map[d] = values[i]; });
+
+    function shiftDate(d, grain, steps) {
+      if (grain === 'day') {
+        const dt = new Date(d + 'T00:00:00Z');
+        dt.setUTCDate(dt.getUTCDate() - steps);
+        return dt.toISOString().slice(0, 10);
       }
-    };
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  STATISTICS ENGINE
-    // ═══════════════════════════════════════════════════════════════════════════
-    const Stats = (() => {
-      function mean(a) { return a.reduce((s, v) => s + v, 0) / a.length; }
-      function variance(a) { const m = mean(a); return a.reduce((s, v) => s + (v - m) ** 2, 0) / (a.length - 1); }
-      function stddev(a) { return Math.sqrt(variance(a)); }
-      function stddevPop(a) { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / a.length); }
-
-      function betainc(x, a, b) {
-        if (x < 0 || x > 1) return NaN;
-        if (x === 0) return 0;
-        if (x === 1) return 1;
-        const lbeta = lgamma(a) + lgamma(b) - lgamma(a + b);
-        const front = Math.exp(Math.log(x) * a + Math.log(1 - x) * b - lbeta) / a;
-        return front * betacf(x, a, b);
+      if (grain === 'week') {
+        const [yr, wk] = d.split('-W').map(Number);
+        let totalWk = yr * 52 + wk - steps;
+        const newYr = Math.floor(totalWk / 52);
+        const newWk = totalWk % 52 || 52;
+        return `${newYr}-W${String(newWk).padStart(2,'0')}`;
       }
-      function lgamma(z) {
-        const c = [76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5];
-        let y = z, tmp = z + 5.5, ser = 1.000000000190015;
-        tmp -= (z + 0.5) * Math.log(tmp);
-        for (let i = 0; i < 6; i++) ser += c[i] / ++y;
-        return -tmp + Math.log(2.5066282746310005 * ser / z);
+      if (grain === 'month') {
+        const [yr, mo] = d.split('-').map(Number);
+        let totalMo = yr * 12 + mo - 1 - steps;
+        const newYr = Math.floor(totalMo / 12);
+        const newMo = totalMo % 12 + 1;
+        return `${newYr}-${String(newMo).padStart(2,'0')}`;
       }
-      function betacf(x, a, b) {
-        const MAXIT = 200, EPS = 3e-7;
-        let qab = a + b, qap = a + 1, qam = a - 1, c = 1, d = 1 - qab * x / qap;
-        if (Math.abs(d) < 1e-30) d = 1e-30; d = 1 / d;
-        let h = d;
-        for (let m = 1; m <= MAXIT; m++) {
-          const m2 = 2 * m;
-          let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
-          d = 1 + aa * d; if (Math.abs(d) < 1e-30) d = 1e-30;
-          c = 1 + aa / c; if (Math.abs(c) < 1e-30) c = 1e-30;
-          d = 1 / d; h *= d * c;
-          aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
-          d = 1 + aa * d; if (Math.abs(d) < 1e-30) d = 1e-30;
-          c = 1 + aa / c; if (Math.abs(c) < 1e-30) c = 1e-30;
-          d = 1 / d; const del = d * c; h *= del;
-          if (Math.abs(del - 1) < EPS) break;
-        }
-        return h;
-      }
-      function tpval(t, df) {
-        const x = df / (df + t * t);
-        return betainc(x, df / 2, 0.5);
-      }
-
-      function linReg(x, y) {
-        const n = x.length, mx = mean(x), my = mean(y);
-        let sxy = 0, sxx = 0;
-        for (let i = 0; i < n; i++) { sxy += (x[i] - mx) * (y[i] - my); sxx += (x[i] - mx) ** 2; }
-        const slope = sxy / sxx, intercept = my - slope * mx;
-        const yhat = x.map(v => slope * v + intercept);
-        const ssres = y.reduce((s, v, i) => s + (v - yhat[i]) ** 2, 0);
-        const sstot = y.reduce((s, v) => s + (v - my) ** 2, 0);
-        const r2 = 1 - ssres / sstot;
-        const se = Math.sqrt(ssres / (n - 2) / sxx);
-        const tstat = slope / se;
-        const pval = tpval(tstat, n - 2);
-        return { slope, intercept, r2, r: Math.sqrt(r2) * Math.sign(slope), se, tstat, pval };
-      }
-
-      function pearson(x, y) {
-        const n = x.length, mx = mean(x), my = mean(y);
-        let sxy = 0, sxx = 0, syy = 0;
-        for (let i = 0; i < n; i++) { const dx = x[i] - mx, dy = y[i] - my; sxy += dx * dy; sxx += dx * dx; syy += dy * dy; }
-        const r = sxy / Math.sqrt(sxx * syy);
-        const tstat = r * Math.sqrt(n - 2) / Math.sqrt(1 - r * r);
-        return { r, pval: tpval(tstat, n - 2) };
-      }
-
-      function olsMultiple(Xcols, y) {
-        const n = y.length, k = Xcols.length + 1;
-        if (n <= k + 1 || !Xcols.length || Xcols.some(c => !c || c.length !== n)) return null;
-        if (y.reduce((s, v) => s + (v - y.reduce((a, b) => a + b, 0) / n) ** 2, 0) === 0) return null;
-        const X = y.map((_, i) => [1, ...Xcols.map(c => c[i])]);
-        const Xt = X[0].map((_, j) => X.map(row => row[j]));
-        if (!Xt || !Xt[0]) return null;
-        const XtX = Xt.map(rowi => Xt.map(rowj => rowi.reduce((s, v, o) => s + v * rowj[o], 0)));
-        const Xty = Xt.map(rowi => rowi.reduce((s, v, o) => s + v * y[o], 0));
-        const inv = invertMatrix([...XtX.map(r => [...r])]);
-        if (!inv) return null;
-        const coeffs = inv.map(row => row.reduce((s, v, i) => s + v * Xty[i], 0));
-        if (coeffs.some(c => isNaN(c) || !isFinite(c))) return null;
-        const yhat = X.map(row => row.reduce((s, v, i) => s + v * coeffs[i], 0));
-        const ssres = y.reduce((s, v, i) => s + (v - yhat[i]) ** 2, 0);
-        const sstot = y.reduce((s, v) => s + (v - y.reduce((a, b) => a + b, 0) / n) ** 2, 0);
-        if (sstot === 0 || ssres < 0) return null;
-        const r2 = 1 - ssres / sstot;
-        const adjR2 = 1 - (1 - r2) * (n - 1) / (n - k - 1);
-        const mse = ssres / (n - k);
-        if (mse <= 0) return null;
-        const seCoeffs = inv.map((row, i) => Math.sqrt(mse * inv[i][i]));
-        if (seCoeffs.some(s => isNaN(s) || !isFinite(s) || s <= 0)) return null;
-        const tstats = coeffs.map((c, i) => c / seCoeffs[i]);
-        const pvals = tstats.map(t => tpval(t, n - k));
-        return { coeffs, r2, adjR2, seCoeffs, tstats, pvals, ssres, mse };
-      }
-      function invertMatrix(m) {
-        const n = m.length;
-        const I = m.map((_, i) => m[0].map((_, j) => i === j ? 1 : 0));
-        for (let i = 0; i < n; i++) {
-          let maxV = Math.abs(m[i][i]), maxR = i;
-          for (let r = i + 1; r < n; r++) if (Math.abs(m[r][i]) > maxV) { maxV = Math.abs(m[r][i]); maxR = r; }
-          [m[i], m[maxR]] = [m[maxR], m[i]];[I[i], I[maxR]] = [I[maxR], I[i]];
-          if (Math.abs(m[i][i]) < 1e-12) return null;
-          const d = m[i][i];
-          for (let j = 0; j < n; j++) { m[i][j] /= d; I[i][j] /= d; }
-          for (let r = 0; r < n; r++) { if (r === i) continue; const f = m[r][i]; for (let j = 0; j < n; j++) { m[r][j] -= f * m[i][j]; I[r][j] -= f * I[i][j]; } }
-        }
-        return I;
-      }
-
-      function seasonalIndex(dates, values) {
-        const buckets = {};
-        dates.forEach((d, i) => {
-          if (!d || typeof d !== 'string' || d.length < 7) return;
-          const m = parseInt(d.slice(5, 7));
-          if (isNaN(m) || m < 1 || m > 12) return;
-          if (!buckets[m]) buckets[m] = [];
-          buckets[m].push(values[i]);
-        });
-        const mn = mean(values);
-        const si = {};
-        for (const m in buckets) {
-          const mi = parseInt(m);
-          if (!isNaN(mi) && mi >= 1 && mi <= 12) si[mi] = mean(buckets[m]) / mn;
-        }
-        return Object.keys(si).length > 0 ? si : null;
-      }
-
-      function anomalies(values, dates, zThresh = 2.0) {
-        const sorted = [...values].sort((a, b) => a - b);
-        const q1 = sorted[Math.floor(sorted.length * 0.25)];
-        const q3 = sorted[Math.floor(sorted.length * 0.75)];
-        const iqr = q3 - q1, lo = q1 - 1.5 * iqr, hi = q3 + 1.5 * iqr;
-        const m = mean(values), s = stddevPop(values);
-        const out = values.map((v, i) => {
-          const z = (v - m) / s;
-          const isOut = v < lo || v > hi || Math.abs(z) > zThresh;
-          return { date: dates[i], value: v, z: +z.toFixed(3), outlier: isOut, direction: v > m ? 'high' : 'low' };
-        }).filter(x => x.outlier);
-        return { outliers: out, q1, q3, iqr, lo, hi, mean: m, std: s };
-      }
-
-      function detectGrain(dates) {
-        const sample = dates.filter(Boolean).slice(0, 20);
-        if (!sample.length) return 'month';
-        const dayCount = sample.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d) || /^\d{4}-W\d{2}-\d$/.test(d)).length;
-        if (dayCount / sample.length > 0.5) return 'day';
-        const weekCount = sample.filter(d => /^\d{4}-W\d{2}$/.test(d)).length;
-        if (weekCount / sample.length > 0.5) return 'week';
-        return 'month';
-      }
-
-      function periodGrowth(dates, values, mode) {
-        const grain = detectGrain(dates);
-        const map = {};
-        dates.forEach((d, i) => { if (d) map[d] = values[i]; });
-
-        function shiftDate(d, grain, steps) {
-          if (grain === 'day') {
-            const dt = new Date(d + 'T00:00:00Z');
-            dt.setUTCDate(dt.getUTCDate() - steps);
-            return dt.toISOString().slice(0, 10);
-          }
-          if (grain === 'week') {
-            const [yr, wk] = d.split('-W').map(Number);
-            let totalWk = yr * 52 + wk - steps;
-            const newYr = Math.floor(totalWk / 52);
-            const newWk = totalWk % 52 || 52;
-            return `${newYr}-W${String(newWk).padStart(2, '0')}`;
-          }
-          if (grain === 'month') {
-            const [yr, mo] = d.split('-').map(Number);
-            let totalMo = yr * 12 + mo - 1 - steps;
-            const newYr = Math.floor(totalMo / 12);
-            const newMo = totalMo % 12 + 1;
-            return `${newYr}-${String(newMo).padStart(2, '0')}`;
-          }
-          return null;
-        }
-
-        const stepsMap = { wow: { day: 7, week: 1, month: null }, mom: { day: 28, week: 4, month: 1 }, yoy: { day: 364, week: 52, month: 12 } };
-        const steps = stepsMap[mode]?.[grain];
-        if (!steps) return [];
-
-        const result = [];
-        dates.forEach((d, i) => {
-          if (!d) return;
-          const prevD = shiftDate(d, grain, steps);
-          if (map[prevD] != null) {
-            const pct = (values[i] - map[prevD]) / map[prevD] * 100;
-            result.push({ date: d, prev_date: prevD, value: values[i], prev_value: map[prevD], pct, yoy: pct });
-          }
-        });
-        return result;
-      }
-
-      function describe(a) {
-        const s = [...a].sort((x, y) => x - y);
-        return { n: a.length, mean: mean(a), std: stddevPop(a), min: s[0], q1: s[Math.floor(s.length * .25)], median: s[Math.floor(s.length * .5)], q3: s[Math.floor(s.length * .75)], max: s[s.length - 1] };
-      }
-
-      return { mean, stddev, stddevPop, linReg, pearson, olsMultiple, seasonalIndex, anomalies, periodGrowth, detectGrain, describe, tpval };
-    })();
-
-    function normalizeDate(d) {
-      if (d === null || d === undefined || d === '') return null;
-      const s = String(d).trim();
-      if (!s || s.startsWith('#')) return null;
-      if (/^\d{8}$/.test(s)) return s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
-      if (/^\d{4}[-\/]\d{2}[-\/]\d{2}/.test(s)) return s.slice(0, 7).replace('/', '-');
-      if (/^\d{4}-\d{2}$/.test(s)) return s;
-      if (/^\d{6}$/.test(s)) return s.slice(0, 4) + '-' + s.slice(4, 6);
       return null;
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  ANALYSIS RUNNER
-    // ═══════════════════════════════════════════════════════════════════════════
-    let parsedData = null, detectedCols = null;
-    const ctx = { goal: null, comp: 'yoy', metric: '', focus: '' };
-    let lastRunPayload = null; // Used for saving URL Share states
+    const stepsMap = { wow: { day: 7, week: 1, month: null }, mom: { day: 28, week: 4, month: 1 }, yoy: { day: 364,week: 52, month: 12 } };
+    const steps = stepsMap[mode]?.[grain];
+    if (!steps) return []; 
 
-    document.getElementById('drop-zone').addEventListener('dragover', e => { e.preventDefault(); e.currentTarget.classList.add('drag'); });
-    document.getElementById('drop-zone').addEventListener('dragleave', e => e.currentTarget.classList.remove('drag'));
-    document.getElementById('drop-zone').addEventListener('drop', e => { e.preventDefault(); e.currentTarget.classList.remove('drag'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
-    document.getElementById('fi').addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+    const result = [];
+    dates.forEach((d, i) => {
+      if (!d) return;
+      const prevD = shiftDate(d, grain, steps);
+      if (map[prevD] != null) {
+        const pct = (values[i] - map[prevD]) / map[prevD] * 100;
+        result.push({ date: d, prev_date: prevD, value: values[i], prev_value: map[prevD], pct, yoy: pct });
+      }
+    });
+    return result;
+  }
 
-    function handleFile(f) {
-      Papa.parse(f, { header: true, dynamicTyping: true, skipEmptyLines: true, worker: true, complete: r => { ingestData(r.data, r.meta.fields, f.name); } });
-    }
-    function loadPaste() {
-      const raw = document.getElementById('paste-area').value.trim(); if (!raw) return;
-      Papa.parse(raw, { header: true, dynamicTyping: true, skipEmptyLines: true, worker: true, complete: r => { ingestData(r.data, r.meta.fields, 'pasted data'); } });
-    }
-    function loadDemo() { ingestData(GT.raw.dates.map((d, i) => ({ date: d, sessions: GT.raw.sessions[i], bookings: GT.raw.bookings[i], service_fee_revenue: GT.raw.revenue[i], hc_bookings: GT.raw.hc_bookings[i] })), ['date', 'sessions', 'bookings', 'service_fee_revenue', 'hc_bookings'], 'Skiplagged actuals 2023-01 to 2024-07'); }
+  function describe(a) {
+    const s=[...a].sort((x,y)=>x-y);
+    return {n:a.length,mean:mean(a),std:stddevPop(a),min:s[0],q1:s[Math.floor(s.length*.25)],median:s[Math.floor(s.length*.5)],q3:s[Math.floor(s.length*.75)],max:s[s.length-1]};
+  }
 
-    function ingestData(rawData, fields, name) {
-      const data = rawData.filter(row => {
-        const vals = Object.values(row);
-        const hasData = vals.some(v => v !== null && v !== '' && v !== undefined);
-        if (!hasData) return false;
-        const allComment = vals.every(v => v === null || v === '' || String(v).startsWith('#'));
-        if (allComment) return false;
-        if (fields && fields.includes(String(vals[0]))) return false;
-        return true;
-      });
-      parsedData = data;
-      detectedCols = inferCols(data, fields);
-      showSchema(name, data.length);
-      show('sec-ctx');
-      document.getElementById('run-btn').disabled = !detectedCols.some(c => c.role === 'metric');
-    }
+  return {mean,stddev,stddevPop,linReg,pearson,olsMultiple,seasonalIndex,anomalies,periodGrowth,detectGrain,describe,tpval};
+})();
 
-    function inferCols(data, fields) {
-      if (!fields || !data.length) return [];
-      return fields.map(f => {
-        const vals = data.map(r => r[f]).filter(v => v != null && v !== '');
-        const nums = vals.filter(v => typeof v === 'number');
-        const dts = vals.filter(v => typeof v === 'string' && /^\d{4}/.test(v));
-        const yyyymmdd = nums.filter(v => v >= 19000101 && v <= 20991231 && Number.isInteger(v) && String(v).length === 8);
-        let type = 'text';
-        if (yyyymmdd.length / vals.length > .7) type = 'date';
-        else if (nums.length / vals.length > .7) type = 'numeric';
-        else if (dts.length / vals.length > .5) type = 'date';
-        let role = 'metric';
-        if (type === 'date') role = 'date';
-        else if (/^(id|key|code|name|label|group|channel|category|segment|type|source|medium|campaign|device|region|country)/i.test(f)) role = 'dim';
-        else if (type === 'text') role = 'dim';
-        return { name: f, type, sample: vals[0], role };
-      });
-    }
+function normalizeDate(d) {
+  if(d===null||d===undefined||d==='') return null;
+  const s = String(d).trim();
+  if(!s||s.startsWith('#')) return null;
+  if (/^\d{8}$/.test(s)) return s.slice(0,4) + '-' + s.slice(4,6) + '-' + s.slice(6,8);
+  if (/^\d{4}[-\/]\d{2}[-\/]\d{2}/.test(s)) return s.slice(0,7).replace('/','-');
+  if (/^\d{4}-\d{2}$/.test(s)) return s;
+  if (/^\d{6}$/.test(s)) return s.slice(0,4) + '-' + s.slice(4,6);
+  return null; 
+}
 
-    function showSchema(filename, rows) {
-      const sw = document.getElementById('schema-wrap');
-      document.getElementById('file-chip-el').innerHTML = `<div class="file-chip">✓ ${esc(filename)}</div>`;
-      document.getElementById('row-count').textContent = `${rows.toLocaleString()} rows · ${detectedCols.length} columns detected — click to set each column's role`;
-      renderColPicker();
-      sw.classList.remove('hidden');
-    }
+// ═══════════════════════════════════════════════════════════════════════════
+//  ANALYSIS RUNNER
+// ═══════════════════════════════════════════════════════════════════════════
+let parsedData=null, detectedCols=null;
+const ctx={goal:null,comp:'yoy',metric:'',focus:''};
+let lastRunPayload = null; 
 
-    function renderColPicker() {
-      const roleLabel = { metric: 'Outcome metric', date: 'Date / time', dim: 'Dimension', ignore: 'Ignore' };
-      const roleClass = { metric: 'role-metric', date: 'role-date', dim: 'role-dim', ignore: 'role-ignore' };
-      document.getElementById('schema-cols').innerHTML = detectedCols.map((c, ci) => `
-    <div class="col-chip ${c.role === 'metric' ? 'is-metric' : c.role === 'date' ? 'is-date' : c.role === 'ignore' ? 'is-ignore' : ''}" id="chip-${ci}">
-      <div class="col-role ${roleClass[c.role] || 'role-dim'}">${roleLabel[c.role] || 'Dimension'}</div>
+document.getElementById('drop-zone').addEventListener('dragover',e=>{e.preventDefault();e.currentTarget.classList.add('drag');});
+document.getElementById('drop-zone').addEventListener('dragleave',e=>e.currentTarget.classList.remove('drag'));
+document.getElementById('drop-zone').addEventListener('drop',e=>{e.preventDefault();e.currentTarget.classList.remove('drag');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
+document.getElementById('fi').addEventListener('change',e=>{if(e.target.files[0])handleFile(e.target.files[0]);});
+
+function handleFile(f){Papa.parse(f,{header:true,dynamicTyping:true,skipEmptyLines:true,worker:true,complete:r=>{ingestData(r.data,r.meta.fields,f.name);}});}
+function loadPaste(){const raw=document.getElementById('paste-area').value.trim();if(!raw)return;Papa.parse(raw,{header:true,dynamicTyping:true,skipEmptyLines:true,worker:true,complete:r=>{ingestData(r.data,r.meta.fields,'pasted data');}});}
+function loadDemo(){ingestData(GT.raw.dates.map((d,i)=>({date:d,sessions:GT.raw.sessions[i],bookings:GT.raw.bookings[i],service_fee_revenue:GT.raw.revenue[i],hc_bookings:GT.raw.hc_bookings[i]})),['date','sessions','bookings','service_fee_revenue','hc_bookings'],'Skiplagged actuals 2023-01 to 2024-07');}
+
+function ingestData(rawData,fields,name){
+  const data = rawData.filter(row=>{
+    const vals = Object.values(row);
+    const hasData = vals.some(v=>v!==null&&v!==''&&v!==undefined);
+    if(!hasData) return false;
+    const allComment = vals.every(v=>v===null||v===''||String(v).startsWith('#'));
+    if(allComment) return false;
+    if(fields&&fields.includes(String(vals[0]))) return false;
+    return true;
+  });
+  parsedData=data;
+  detectedCols=inferCols(data,fields);
+  showSchema(name,data.length);
+  show('sec-ctx');
+  document.getElementById('run-btn').disabled=!detectedCols.some(c=>c.role==='metric');
+}
+
+function inferCols(data,fields){
+  if(!fields||!data.length) return [];
+  return fields.map(f=>{
+    const vals=data.map(r=>r[f]).filter(v=>v!=null&&v!=='');
+    const nums=vals.filter(v=>typeof v==='number');
+    const dts=vals.filter(v=>typeof v==='string'&&/^\d{4}/.test(v));
+    const yyyymmdd=nums.filter(v=>v>=19000101&&v<=20991231&&Number.isInteger(v)&&String(v).length===8);
+    let type='text';
+    if(yyyymmdd.length/vals.length>.7) type='date';
+    else if(nums.length/vals.length>.7) type='numeric';
+    else if(dts.length/vals.length>.5) type='date';
+    let role='metric';
+    if(type==='date') role='date';
+    else if(/^(id|key|code|name|label|group|channel|category|segment|type|source|medium|campaign|device|region|country)/i.test(f)) role='dim';
+    else if(type==='text') role='dim';
+    return {name:f,type,sample:vals[0],role};
+  });
+}
+
+function showSchema(filename,rows){
+  const sw=document.getElementById('schema-wrap');
+  document.getElementById('file-chip-el').innerHTML=`<div class="file-chip">✓ ${esc(filename)}</div>`;
+  document.getElementById('row-count').textContent=`${rows.toLocaleString()} rows · ${detectedCols.length} columns detected — click to set each column's role`;
+  renderColPicker();
+  sw.classList.remove('hidden');
+}
+
+function renderColPicker(){
+  const roleLabel={metric:'Outcome metric',date:'Date / time',dim:'Dimension',ignore:'Ignore'};
+  const roleClass={metric:'role-metric',date:'role-date',dim:'role-dim',ignore:'role-ignore'};
+  document.getElementById('schema-cols').innerHTML=detectedCols.map((c,ci)=>`
+    <div class="col-chip ${c.role==='metric'?'is-metric':c.role==='date'?'is-date':c.role==='ignore'?'is-ignore':''}" id="chip-${ci}">
+      <div class="col-role ${roleClass[c.role]||'role-dim'}">${roleLabel[c.role]||'Dimension'}</div>
       <div class="sc-col">${esc(c.name)}</div>
-      <div class="sc-sample">${esc(String(c.sample ?? '—').substring(0, 18))}</div>
+      <div class="sc-sample">${esc(String(c.sample??'—').substring(0,18))}</div>
       <div class="col-actions">
-        <button class="col-act ${c.role === 'metric' ? 'active-metric' : ''}" onclick="setRole(${ci},'metric')">metric</button>
-        <button class="col-act ${c.role === 'date' ? 'active-date' : ''}" onclick="setRole(${ci},'date')">date</button>
-        <button class="col-act ${c.role === 'dim' ? '' : ''}" onclick="setRole(${ci},'dim')">dimension</button>
-        <button class="col-act ${c.role === 'ignore' ? 'active-ignore' : ''}" onclick="setRole(${ci},'ignore')">ignore</button>
+        <button class="col-act ${c.role==='metric'?'active-metric':''}" onclick="setRole(${ci},'metric')">metric</button>
+        <button class="col-act ${c.role==='date'?'active-date':''}" onclick="setRole(${ci},'date')">date</button>
+        <button class="col-act ${c.role==='dim'?'':''}" onclick="setRole(${ci},'dim')">dimension</button>
+        <button class="col-act ${c.role==='ignore'?'active-ignore':''}" onclick="setRole(${ci},'ignore')">ignore</button>
       </div>
     </div>`).join('');
-    }
+}
 
-    function setRole(ci, role) {
-      if (role === 'date') detectedCols.forEach((c, i) => { if (i !== ci && c.role === 'date') c.role = 'dim'; });
-      detectedCols[ci].role = role;
-      renderColPicker();
-      const hasMetric = detectedCols.some(c => c.role === 'metric');
-      document.getElementById('run-btn').disabled = !hasMetric;
-    }
+function setRole(ci,role){
+  if(role==='date') detectedCols.forEach((c,i)=>{ if(i!==ci&&c.role==='date') c.role='dim'; });
+  detectedCols[ci].role=role;
+  renderColPicker();
+  const hasMetric=detectedCols.some(c=>c.role==='metric');
+  document.getElementById('run-btn').disabled=!hasMetric;
+}
 
-    function pick(el, group, val) {
-      document.querySelectorAll(`.q-opt`).forEach(o => { if (o.getAttribute('data-v') && o.parentElement === el.parentElement) o.classList.remove('on'); });
-      el.classList.add('on');
-      if (group === 'goal') ctx.goal = val;
-      else if (group === 'comp') ctx.comp = val;
-    }
+function pick(el,group,val){
+  document.querySelectorAll(`.q-opt`).forEach(o=>{ if(o.getAttribute('data-v')&&o.parentElement===el.parentElement) o.classList.remove('on'); });
+  el.classList.add('on');
+  if(group==='goal') ctx.goal=val;
+  else if(group==='comp') ctx.comp=val;
+}
 
-    async function runAnalysis() {
-      ctx.focus = document.getElementById('focus-inp').value;
-      if (!ctx.comp) ctx.comp = 'yoy';
-      if (!parsedData || !parsedData.length) { alert('Upload a dataset first.'); return; }
-      show('sec-run');
+async function runAnalysis(){
+  ctx.focus=document.getElementById('focus-inp').value;
+  if(!ctx.comp) ctx.comp='yoy';
+  if(!parsedData||!parsedData.length){alert('Upload a dataset first.');return;}
+  show('sec-run');
 
-      const steps = ['Detecting data structure', 'Aggregating to monthly series', 'Computing trend & regression', 'Calculating seasonal index', 'Running correlation analysis', 'Generating narrative via Claude AI'];
-      const prog = document.getElementById('prog-list');
-      prog.innerHTML = steps.map((s, i) => `<div class="prog-item" id="pi${i}"><div class="prog-dot"></div>${s}</div>`).join('');
-      let si = 0;
-      const adv = () => {
-        if (si > 0) document.getElementById(`pi${si - 1}`)?.classList.replace('act', 'done');
-        const el = document.getElementById(`pi${si}`);
-        if (el) { el.classList.add('act'); document.getElementById('run-lbl').textContent = el.textContent.trim(); }
-        si++;
-      };
-      adv();
+  const steps=['Detecting data structure','Aggregating to series','Computing trend & regression','Calculating seasonality','Running correlation analysis','Generating narrative via Claude AI'];
+  const prog=document.getElementById('prog-list');
+  prog.innerHTML=steps.map((s,i)=>`<div class="prog-item" id="pi${i}"><div class="prog-dot"></div>${s}</div>`).join('');
+  let si=0;
+  const adv=()=>{
+    if(si>0)document.getElementById(`pi${si-1}`)?.classList.replace('act','done');
+    const el=document.getElementById(`pi${si}`);
+    if(el){el.classList.add('act');document.getElementById('run-lbl').textContent=el.textContent.trim();}
+    si++;
+  };
+  adv();
 
-      try {
-        const metricCols = detectedCols.filter(c => c.role === 'metric').map(c => c.name);
-        const dateCols = detectedCols.filter(c => c.role === 'date' || c.type === 'date' || c.name.toLowerCase() === 'date').map(c => c.name);
-        const dateCol = dateCols[0] || null;
-        const metricCol = (metricCols.includes(ctx.metric) ? ctx.metric : null) || metricCols[0] || null;
-        if (!metricCol) throw new Error('No metric column selected. Use the column picker to mark at least one column as a metric.');
-        const numCols = metricCols.filter(c => c !== metricCol);
+  try {
+    const metricCols=detectedCols.filter(c=>c.role==='metric').map(c=>c.name);
+    const dateCols=detectedCols.filter(c=>c.role==='date'||c.type==='date'||c.name.toLowerCase()==='date').map(c=>c.name);
+    const dateCol=dateCols[0]||null;
+    const metricCol=(metricCols.includes(ctx.metric)?ctx.metric:null)||metricCols[0]||null;
+    if(!metricCol) throw new Error('No metric column selected. Use the column picker to mark at least one column as a metric.');
+    const numCols=metricCols.filter(c=>c!==metricCol);
 
-        const toNum = v => typeof v === 'number' ? v : parseFloat(v);
+    const toNum=v=>typeof v==='number'?v:parseFloat(v);
 
-        await sleep(500); adv();
+    await sleep(500); adv();
 
-        let Y, dates, T, grain;
+    let Y, dates, T, grain;
 
-        if (dateCol) {
-          const rawSample = parsedData.slice(0, 30).map(row => normalizeDate(String(row[dateCol] || '').trim())).filter(Boolean);
-          grain = Stats.detectGrain(rawSample);
+    if (dateCol) {
+      const rawSample = parsedData.slice(0,30).map(row=>normalizeDate(String(row[dateCol]||'').trim())).filter(Boolean);
+      grain = Stats.detectGrain(rawSample);
 
-          function bucketKey(rawDate) {
-            const s = String(rawDate || '').trim();
-            if (!s) return null;
-            const n = normalizeDate(s);
-            if (!n) return null;
-            if (grain === 'month') return n.slice(0, 7);
-            if (grain === 'week') {
-              const dt = new Date(n.slice(0, 10) + 'T00:00:00Z');
-              const jan4 = new Date(Date.UTC(dt.getUTCFullYear(), 0, 4));
-              const wk = Math.ceil(((dt - jan4) / 86400000 + jan4.getUTCDay() + 1) / 7);
-              return `${dt.getUTCFullYear()}-W${String(wk).padStart(2, '0')}`;
-            }
-            return n.slice(0, 10);
-          }
-
-          const bucketMetric = {}, bucketCols = {};
-          numCols.forEach(c => { bucketCols[c] = {}; });
-          parsedData.forEach(row => {
-            const bk = bucketKey(row[dateCol]);
-            if (!bk) return;
-            const v = toNum(row[metricCol]);
-            if (isNaN(v)) return;
-            bucketMetric[bk] = (bucketMetric[bk] || 0) + v;
-            numCols.forEach(c => { const cv = toNum(row[c]); if (!isNaN(cv)) bucketCols[c][bk] = (bucketCols[c][bk] || 0) + cv; });
-          });
-
-          dates = Object.keys(bucketMetric).sort();
-          if (dates.length < 3) throw new Error(`Not enough distinct ${grain} periods (need 3+). Found: ${dates.length}`);
-          Y = dates.map(d => bucketMetric[d]);
-          T = Y.map((_, i) => i);
-          window._aggCols = {};
-          numCols.forEach(c => { window._aggCols[c] = dates.map(d => bucketCols[c][d] || 0); });
-
-        } else {
-          grain = 'unknown';
-          const completeIdx = parsedData.map((_, i) => i).filter(i => !isNaN(toNum(parsedData[i][metricCol])));
-          if (completeIdx.length < 3) throw new Error('Not enough valid rows (need at least 3).');
-          Y = completeIdx.map(i => toNum(parsedData[i][metricCol]));
-          dates = Y.map((_, i) => `T${i + 1}`);
-          T = Y.map((_, i) => i);
-          window._aggCols = {};
-          numCols.forEach(c => { window._aggCols[c] = completeIdx.map(i => { const v = toNum(parsedData[i][c]); return isNaN(v) ? 0 : v; }); });
+      function bucketKey(rawDate) {
+        const s = String(rawDate||'').trim();
+        if(!s) return null;
+        const n = normalizeDate(s);
+        if(!n) return null;
+        if(grain==='month') return n.slice(0,7);
+        if(grain==='week') {
+          const dt=new Date(n.slice(0,10)+'T00:00:00Z');
+          const jan4=new Date(Date.UTC(dt.getUTCFullYear(),0,4));
+          const wk=Math.ceil(((dt-jan4)/86400000+jan4.getUTCDay()+1)/7);
+          return `${dt.getUTCFullYear()}-W${String(wk).padStart(2,'0')}`;
         }
+        return n.slice(0,10); 
+      }
 
-        await sleep(600); adv();
+      const bucketMetric={}, bucketCols={};
+      numCols.forEach(c=>{ bucketCols[c]={}; });
+      parsedData.forEach(row=>{
+        const bk=bucketKey(row[dateCol]);
+        if(!bk) return;
+        const v=toNum(row[metricCol]);
+        if(isNaN(v)) return;
+        bucketMetric[bk]=(bucketMetric[bk]||0)+v;
+        numCols.forEach(c=>{ const cv=toNum(row[c]); if(!isNaN(cv)) bucketCols[c][bk]=(bucketCols[c][bk]||0)+cv; });
+      });
 
-        let channel_breakdown = null;
-        if (ctx.goal === 'channels') {
-          const dimCols = detectedCols.filter(c => c.role === 'dim').map(c => c.name);
-          let targetDim = dimCols.find(c => /channel|source|medium|campaign/i.test(c)) || dimCols[0];
+      dates=Object.keys(bucketMetric).sort();
+      if(dates.length<3) throw new Error(`Not enough distinct ${grain} periods (need 3+). Found: ${dates.length}`);
+      Y=dates.map(d=>bucketMetric[d]);
+      T=Y.map((_,i)=>i);
+      window._aggCols={};
+      numCols.forEach(c=>{ window._aggCols[c]=dates.map(d=>bucketCols[c][d]||0); });
 
-          if (targetDim) {
-            const chTotals = {};
-            let grandTotal = 0;
-            parsedData.forEach(row => {
-              const k = String(row[targetDim] || 'Unknown').trim();
-              const v = toNum(row[metricCol]);
-              if (!isNaN(v)) {
-                chTotals[k] = (chTotals[k] || 0) + v;
-                grandTotal += v;
-              }
-            });
-            const sortedCh = Object.entries(chTotals)
-              .sort((a, b) => b[1] - a[1])
-              .slice(0, 10);
+    } else {
+      grain='unknown';
+      const completeIdx=parsedData.map((_,i)=>i).filter(i=>!isNaN(toNum(parsedData[i][metricCol])));
+      if(completeIdx.length<3) throw new Error('Not enough valid rows (need at least 3).');
+      Y=completeIdx.map(i=>toNum(parsedData[i][metricCol]));
+      dates=Y.map((_,i)=>`T${i+1}`);
+      T=Y.map((_,i)=>i);
+      window._aggCols={};
+      numCols.forEach(c=>{ window._aggCols[c]=completeIdx.map(i=>{const v=toNum(parsedData[i][c]);return isNaN(v)?0:v;}); });
+    }
 
-            if (grandTotal > 0 && sortedCh.length > 0) {
-              channel_breakdown = {
-                dimension_name: targetDim,
-                total_volume: +grandTotal.toFixed(2),
-                data: sortedCh.map(([name, val]) => ({
-                  name,
-                  value: +val.toFixed(2),
-                  share_pct: +((val / grandTotal) * 100).toFixed(1)
-                }))
-              };
-            }
+    await sleep(600); adv();
+
+    let channel_breakdown = null;
+    if (ctx.goal === 'channels') {
+      const dimCols = detectedCols.filter(c => c.role === 'dim').map(c => c.name);
+      let targetDim = dimCols.find(c => /channel|source|medium|campaign/i.test(c)) || dimCols[0];
+      
+      if (targetDim) {
+        const chTotals = {};
+        let grandTotal = 0;
+        parsedData.forEach(row => {
+          const k = String(row[targetDim] || 'Unknown').trim();
+          const v = toNum(row[metricCol]);
+          if (!isNaN(v)) {
+            chTotals[k] = (chTotals[k] || 0) + v;
+            grandTotal += v;
           }
+        });
+        const sortedCh = Object.entries(chTotals)
+                               .sort((a,b) => b[1] - a[1])
+                               .slice(0, 10);
+        
+        if (grandTotal > 0 && sortedCh.length > 0) {
+          channel_breakdown = {
+            dimension_name: targetDim,
+            total_volume: +grandTotal.toFixed(2),
+            data: sortedCh.map(([name, val]) => ({
+              name,
+              value: +val.toFixed(2),
+              share_pct: +((val / grandTotal) * 100).toFixed(1)
+            }))
+          };
         }
-
-        const trend = Stats.linReg(T, Y);
-        const pearsonPairs = numCols.filter(c => c !== metricCol).slice(0, 5).map(c => {
-          const X = window._aggCols[c];
-          if (!X || X.length !== Y.length) return null;
-          const p = Stats.pearson(X, Y);
-          return { name: c, r: p.r, p: p.pval, data: X };
-        }).filter(Boolean).sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
-
-        const strongPredictors = pearsonPairs.filter(p => Math.abs(p.r) > 0.1).slice(0, 2);
-        const topPredictors = strongPredictors.map(p => p.data).filter(Boolean);
-        const ols = topPredictors.length > 0 ? Stats.olsMultiple([...topPredictors, T], Y) : null;
-        const si_data = (dateCol && grain === 'month') ? Stats.seasonalIndex(dates, Y) : null;
-        const anom = Stats.anomalies(Y, dates);
-        const compMode = ctx.comp === 'auto' ? (grain === 'day' ? 'wow' : grain === 'week' ? 'wow' : 'yoy') : (ctx.comp || 'yoy');
-        const period_data = dateCol ? Stats.periodGrowth(dates, Y, compMode) : [];
-        const yoy_data = period_data;
-        const desc = Stats.describe(Y);
-
-        await sleep(500); adv(); await sleep(400); adv();
-
-        const siEntries = si_data ? Object.entries(si_data).sort((a, b) => b[1] - a[1]) : [];
-        const statsPayload = {
-          metric: metricCol,
-          n: Y.length,
-          date_range: dateCol ? [dates[0], dates[dates.length - 1]] : null,
-          trend: { slope: +((trend.slope ?? 0).toFixed(2)), r2: +((trend.r2 ?? 0).toFixed(4)), p_value: +((trend.pval ?? 1).toFixed(4)), direction: (trend.slope ?? 0) > 0 ? 'increasing' : 'decreasing' },
-          seasonal: si_data && siEntries.length ? { peak: siEntries[0], trough: siEntries[siEntries.length - 1], amplitude: +(((siEntries[0][1] - siEntries[siEntries.length - 1][1]) / 2 * 100).toFixed(1)) } : null,
-          correlations: pearsonPairs.slice(0, 4).map(p => ({ name: p.name, r: +((p.r ?? 0).toFixed(4)), p: +((p.p ?? 1).toFixed(5)) })),
-          ols: ols ? { r2: +ols.r2.toFixed(4), adj_r2: +ols.adjR2.toFixed(4), predictors: pearsonPairs.filter(p => Math.abs(p.r) > 0.1).slice(0, 2).map((p, i) => ({ name: p.name, coeff: +(ols.coeffs[i + 1] ?? 0).toFixed(4), p_value: +(ols.pvals[i + 1] ?? 1).toFixed(5) })) } : null,
-          anomalies: anom.outliers.map(o => ({ date: o.date, value: +o.value.toFixed(0), z: o.z, direction: o.direction })),
-          stats: { mean: +((desc.mean ?? 0).toFixed(2)), std: +((desc.std ?? 0).toFixed(2)), min: +((desc.min ?? 0).toFixed(2)), max: +((desc.max ?? 0).toFixed(2)) },
-          yoy: yoy_data.slice(-8).map(y => ({ date: y.date, pct: +((y.pct ?? y.yoy ?? 0).toFixed(2)) })),
-          goal: ctx.goal || 'general',
-          channel_breakdown,
-          grain,
-          comp_mode: compMode,
-          context: `Skiplagged.com — flight search with hidden-city ticketing. Revenue: direct booking service fees + affiliate/referral fees. Data grain: ${grain}. Comparison mode: ${compMode}. ${ctx.focus || ''}`
-        };
-
-        adv();
-        const narrative = await callClaude(statsPayload);
-        await sleep(300);
-
-        const fullPayload = { stats: statsPayload, narrative, Y, dates, T, trend, si_data, pearsonPairs, ols, anom, yoy_data, metricCol, desc, dateCol, grain, compMode };
-        lastRunPayload = fullPayload; // Save for sharing
-        renderResults(fullPayload);
-
-      } catch (e) {
-        renderError(e.message || String(e));
       }
     }
 
-    async function callClaude(statsPayload) {
-      const prompt = `You are a senior business analyst for Skiplagged.com. Statistical computations have already been run — your job is to interpret them into clear business language.
+    const trend=Stats.linReg(T,Y);
+    const pearsonPairs=numCols.filter(c=>c!==metricCol).slice(0,5).map(c=>{
+      const X=window._aggCols[c];
+      if(!X||X.length!==Y.length) return null;
+      const p=Stats.pearson(X,Y);
+      return {name:c,r:p.r,p:p.pval,data:X};
+    }).filter(Boolean).sort((a,b)=>Math.abs(b.r)-Math.abs(a.r));
+
+    const strongPredictors=pearsonPairs.filter(p=>Math.abs(p.r)>0.1).slice(0,2);
+    
+    // --- OLS MATRIX SETUP ---
+    let olsMatrix = [...strongPredictors.map(p=>p.data), T];
+    let olsNames = [...strongPredictors.map(p=>p.name), 'trend'];
+
+    // Inject Day of Week Dummies for Daily Grain
+    if (grain === 'day' && Y.length > 14) {
+      const dowDummies = [1, 2, 3, 4, 5, 6].map(d => ({
+        name: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][d],
+        data: dates.map(dt => (new Date(dt + 'T00:00:00Z').getUTCDay() + 6) % 7 === d ? 1 : 0)
+      }));
+      olsMatrix.push(...dowDummies.map(d=>d.data));
+      olsNames.push(...dowDummies.map(d=>d.name));
+    }
+
+    const ols = olsMatrix.length > 0 ? Stats.olsMultiple(olsMatrix, Y) : null;
+
+    // --- SEASONALITY SETUP ---
+    const si_data=(dateCol&&grain==='month')?Stats.seasonalIndex(dates,Y):null;
+    
+    let dow_data = null;
+    if (dateCol && grain === 'day') {
+      const buckets = [0,0,0,0,0,0,0];
+      const counts = [0,0,0,0,0,0,0];
+      dates.forEach((d, i) => {
+        const day = (new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7; // Mon=0
+        buckets[day] += Y[i];
+        counts[day]++;
+      });
+      const validAvg = Stats.mean(Y);
+      dow_data = buckets.map((b,i) => counts[i] && validAvg ? (b/counts[i])/validAvg : 1);
+    }
+
+    const anom=Stats.anomalies(Y,dates);
+    const compMode = ctx.comp==='auto' ? (grain==='day'?'wow':grain==='week'?'wow':'yoy') : (ctx.comp||'yoy');
+    const period_data=dateCol?Stats.periodGrowth(dates,Y,compMode):[];
+    const yoy_data=period_data; 
+    const desc=Stats.describe(Y);
+
+    await sleep(500); adv(); await sleep(400); adv();
+
+    const siEntries=si_data?Object.entries(si_data).sort((a,b)=>b[1]-a[1]):[];
+    const statsPayload={
+      metric:metricCol,
+      n:Y.length,
+      date_range:dateCol?[dates[0],dates[dates.length-1]]:null,
+      trend:{slope:+((trend.slope??0).toFixed(2)),r2:+((trend.r2??0).toFixed(4)),p_value:+((trend.pval??1).toFixed(4)),direction:(trend.slope??0)>0?'increasing':'decreasing'},
+      seasonal:si_data&&siEntries.length?{peak:siEntries[0],trough:siEntries[siEntries.length-1],amplitude:+(((siEntries[0][1]-siEntries[siEntries.length-1][1])/2*100).toFixed(1))}:null,
+      weekly_seasonality: dow_data ? dow_data.map(v => +(v*100).toFixed(1)) : null,
+      correlations:pearsonPairs.slice(0,4).map(p=>({name:p.name,r:+((p.r??0).toFixed(4)),p:+((p.p??1).toFixed(5))})),
+      ols:ols?{r2:+ols.r2.toFixed(4),adj_r2:+ols.adjR2.toFixed(4),predictors:olsNames.map((name,i)=>({name:name,coeff:+(ols.coeffs[i+1]??0).toFixed(4),p_value:+(ols.pvals[i+1]??1).toFixed(5)}))}:null,
+      anomalies:anom.outliers.map(o=>({date:o.date,value:+o.value.toFixed(0),z:o.z,direction:o.direction})),
+      stats:{mean:+((desc.mean??0).toFixed(2)),std:+((desc.std??0).toFixed(2)),min:+((desc.min??0).toFixed(2)),max:+((desc.max??0).toFixed(2))},
+      yoy:yoy_data.slice(-8).map(y=>({date:y.date,pct:+((y.pct??y.yoy??0).toFixed(2))})),
+      goal:ctx.goal||'general',
+      channel_breakdown,
+      grain,
+      comp_mode:compMode,
+      context:`Skiplagged.com — flight search with hidden-city ticketing. Revenue: direct booking service fees + affiliate/referral fees. Data grain: ${grain}. Comparison mode: ${compMode}. ${ctx.focus||''}`
+    };
+
+    adv();
+    const narrative=await callClaude(statsPayload);
+    await sleep(300);
+
+    const fullPayload = {stats:statsPayload,narrative,Y,dates,T,trend,si_data,dow_data,pearsonPairs,ols,olsNames,anom,yoy_data,metricCol,desc,dateCol,grain,compMode};
+    lastRunPayload = fullPayload; 
+    renderResults(fullPayload);
+
+  } catch(e){
+    renderError(e.message||String(e));
+  }
+}
+
+async function callClaude(statsPayload){
+  const prompt=`You are a senior business analyst for Skiplagged.com. Statistical computations have already been run — your job is to interpret them into clear business language.
 
 Context: ${statsPayload.context}
 Goal: ${statsPayload.goal}
-Metric analyzed: ${statsPayload.metric} (n=${statsPayload.n} periods${statsPayload.date_range ? `, ${statsPayload.date_range[0]}–${statsPayload.date_range[1]}` : ''})
+Metric analyzed: ${statsPayload.metric} (n=${statsPayload.n} periods${statsPayload.date_range?`, ${statsPayload.date_range[0]}–${statsPayload.date_range[1]}`:''})
 
 Statistical results:
 ${JSON.stringify(statsPayload, null, 2)}
@@ -1710,7 +821,7 @@ Return ONLY valid JSON (no markdown, no preamble):
     },
     {
       "id": "seasonality",
-      "plain_english": "2-3 sentences about seasonal patterns. Use real month names and percentages from the seasonal index.",
+      "plain_english": "2-3 sentences about seasonal patterns. Use real month names or days of the week based on the provided index.",
       "what_now": "One concrete action."
     },
     {
@@ -1737,31 +848,32 @@ Return ONLY valid JSON (no markdown, no preamble):
   ]
 }`;
 
-      const apiKey = getKey();
-      if (!apiKey) { throw new Error('No API key set. Enter your Anthropic API key at the top of the page.'); }
-      const res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1800, messages: [{ role: 'user', content: prompt }] }) });
-      if (!res.ok) throw new Error(`Claude API: ${res.status}`);
-      const data = await res.json();
-      const txt = data.content?.filter(c => c.type === 'text').map(c => c.text).join('');
-      if (!txt) throw new Error('No response from Claude');
-      const clean = txt.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      try { return JSON.parse(clean); } catch (e) { const m = clean.match(/\{[\s\S]*\}/); if (m) return JSON.parse(m[0]); throw new Error('Could not parse Claude response'); }
-    }
+  const apiKey = getKey();
+  if (!apiKey) { throw new Error('No API key set. Enter your Anthropic API key at the top of the page.'); }
+  const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1800,messages:[{role:'user',content:prompt}]})});
+  if(!res.ok) throw new Error(`Claude API: ${res.status}`);
+  const data=await res.json();
+  const txt=data.content?.filter(c=>c.type==='text').map(c=>c.text).join('');
+  if(!txt) throw new Error('No response from Claude');
+  const clean=txt.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+  try{return JSON.parse(clean);}catch(e){const m=clean.match(/\{[\s\S]*\}/);if(m)return JSON.parse(m[0]);throw new Error('Could not parse Claude response');}
+}
 
-    const chartRegistry = [];
-    function renderResults({ stats, narrative, Y, dates, T, trend, si_data, pearsonPairs, ols, anom, yoy_data, metricCol, desc, dateCol, grain, compMode, isShared }) {
-      chartRegistry.forEach(c => c.destroy()); chartRegistry.length = 0;
-      try {
-        const mods = narrative.modules || [];
-        const getText = (id, field) => { const m = mods.find(x => x.id === id); return m ? m[field] || '' : ''; }
+const chartRegistry=[];
+function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearsonPairs,ols,olsNames,anom,yoy_data,metricCol,desc,dateCol,grain,compMode, isShared}){
+  chartRegistry.forEach(c=>c.destroy()); chartRegistry.length=0;
+  try {
+  const mods=narrative.modules||[];
+  const getText=(id,field)=>{const m=mods.find(x=>x.id===id);return m?m[field]||'':'';}
 
-        const months_en = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const fmt = v => { if (Math.abs(v) >= 1e6) return `$${(v / 1e6).toFixed(2)}M`; if (Math.abs(v) >= 1e3) return `$${(v / 1e3).toFixed(1)}K`; return `$${v.toFixed(0)}`; };
-        const fmtN = v => { if (Math.abs(v) >= 1e6) return `${(v / 1e6).toFixed(2)}M`; if (Math.abs(v) >= 1e3) return `${(v / 1e3).toFixed(0)}K`; return v.toFixed(0); };
-        const pFmt = p => { if (p < 0.001) return 'p < 0.001'; if (p < 0.01) return 'p < 0.01'; if (p < 0.05) return `p = ${p.toFixed(3)}`; return `p = ${p.toFixed(3)}`; };
-        const sigClass = p => p < 0.05 ? 'sig-yes' : p < 0.15 ? 'sig-warn' : 'sig-no';
+  const months_en=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const days_en=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  
+  const fmt=v=>{if(Math.abs(v)>=1e6)return `$${(v/1e6).toFixed(2)}M`;if(Math.abs(v)>=1e3)return `$${(v/1e3).toFixed(1)}K`;return `$${v.toFixed(0)}`;};
+  const pFmt=p=>{if(p<0.001)return 'p < 0.001';if(p<0.01)return 'p < 0.01';if(p<0.05)return `p = ${p.toFixed(3)}`;return `p = ${p.toFixed(3)}`;};
+  const sigClass=p=>p<0.05?'sig-yes':p<0.15?'sig-warn':'sig-no';
 
-        const trendHTML = `
+  const trendHTML=`
     <div class="mod-card" id="mc-trend">
       <div class="mod-head">
         <div class="mod-ic">↗</div>
@@ -1769,125 +881,143 @@ Return ONLY valid JSON (no markdown, no preamble):
       </div>
       <div class="mod-body">
         <div class="stats-row">
-          <div class="stat-c"><div class="stat-lbl">Monthly change</div><div class="stat-val ${trend.slope > 0 ? 'pos' : 'neg'}">${trend.slope > 0 ? '+' : ''}${fmt(trend.slope)}/mo</div></div>
-          <div class="stat-c"><div class="stat-lbl">R² (fit)</div><div class="stat-val neu">${(trend.r2 * 100).toFixed(1)}%</div></div>
+          <div class="stat-c"><div class="stat-lbl">${grain==='month'?'Monthly':'Daily'} change</div><div class="stat-val ${trend.slope>0?'pos':'neg'}">${trend.slope>0?'+':''}${fmt(trend.slope)}/${grain==='month'?'mo':'day'}</div></div>
+          <div class="stat-c"><div class="stat-lbl">R² (fit)</div><div class="stat-val neu">${(trend.r2*100).toFixed(1)}%</div></div>
           <div class="stat-c"><div class="stat-lbl">Overall mean</div><div class="stat-val neu">${fmt(desc.mean)}</div></div>
           <div class="stat-c"><div class="stat-lbl">Std deviation</div><div class="stat-val neu">${fmt(desc.std)}</div></div>
         </div>
-        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('trend', 'plain_english'))}</div></div>
+        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('trend','plain_english'))}</div></div>
         <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
-        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('trend', 'what_now'))}</div></div>
+        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('trend','what_now'))}</div></div>
         <div class="tech-row"><span class="tech-tag">OLS linear regression</span><span class="sig-pill ${sigClass(trend.pval)}">${pFmt(trend.pval)}</span><span class="tech-tag">n=${Y.length}</span></div>
       </div>
     </div>`;
 
-        const si_entries = si_data ? Object.entries(si_data).sort((a, b) => a[0] - b[0]) : [];
-        const seasonHTML = `
+  // Render Seasonality Chart Data (either DoW or Monthly)
+  let seasonDataToRender = [];
+  let seasonLabels = [];
+  let seasonSubtitle = '';
+  
+  if (grain === 'day' && dow_data) {
+    seasonSubtitle = 'Weekly Rhythm — Index relative to 7-day average';
+    seasonDataToRender = dow_data;
+    seasonLabels = days_en;
+  } else if (grain === 'month' && si_data) {
+    seasonSubtitle = 'Monthly Index — Index relative to annual average';
+    const sis = Object.entries(si_data).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
+    seasonDataToRender = sis.map(([,v])=>v);
+    seasonLabels = sis.map(([m])=>months_en[parseInt(m)-1] || m);
+  }
+
+  const seasonStats = seasonDataToRender.map((v, i) => ({label: seasonLabels[i], val: v}))
+                                        .sort((a,b)=>b.val-a.val)
+                                        .slice(0,4);
+
+  const seasonHTML=`
     <div class="mod-card">
       <div class="mod-head">
         <div class="mod-ic">~</div>
-        <div><div class="mod-title">Seasonality</div><div class="mod-subtitle">Monthly index — how much each month deviates from annual average</div></div>
+        <div><div class="mod-title">Seasonality</div><div class="mod-subtitle">${seasonSubtitle || 'Requires a date column'}</div></div>
       </div>
       <div class="mod-body">
-        ${si_entries.length ? `<div class="stats-row">${[...si_entries].filter(([m]) => { const mi = parseInt(m); return mi >= 1 && mi <= 12; }).slice(0, 4).sort((a, b) => b[1] - a[1]).map(([m, v]) => `<div class="stat-c"><div class="stat-lbl">${months_en[parseInt(m) - 1]}</div><div class="stat-val ${v > 1 ? 'pos' : v < 0.95 ? 'neg' : 'neu'}">${(v * 100).toFixed(1)}%</div></div>`).join('')}</div>` : ''}
-        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('seasonality', 'plain_english') || 'No date column detected — seasonal analysis requires a date column.')}</div></div>
-        ${si_entries.length ? `<div class="chart-wrap"><canvas id="chart-season"></canvas></div>` : ''}
-        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('seasonality', 'what_now'))}</div></div>
-        <div class="tech-row"><span class="tech-tag">Seasonal index (ratio-to-mean)</span>${si_entries.length ? `<span class="tech-tag">Peak: ${months_en[(parseInt((([...si_entries].sort((a, b) => b[1] - a[1]) || [[]])[0] || ['1'])[0]) || 1) - 1]}</span>` : ''}</div>
+        ${seasonStats.length?`<div class="stats-row">${seasonStats.map(s=>`<div class="stat-c"><div class="stat-lbl">${s.label}</div><div class="stat-val ${s.val>1?'pos':s.val<0.95?'neg':'neu'}">${(s.val*100).toFixed(1)}%</div></div>`).join('')}</div>`:''}
+        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('seasonality','plain_english')||'No date column detected — seasonal analysis requires a date column.')}</div></div>
+        ${seasonDataToRender.length?`<div class="chart-wrap"><canvas id="chart-season"></canvas></div>`:''}
+        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('seasonality','what_now'))}</div></div>
+        <div class="tech-row"><span class="tech-tag">Ratio-to-mean index</span>${seasonStats.length?`<span class="tech-tag">Peak: ${seasonStats[0].label}</span>`:''}</div>
       </div>
     </div>`;
 
-        const maxR = pearsonPairs?.length ? Math.max(...pearsonPairs.map(p => Math.abs(p.r))) : 1;
-        const corrHTML = `
+  const maxR=pearsonPairs?.length?Math.max(...pearsonPairs.map(p=>Math.abs(p.r))):1;
+  const corrHTML=`
     <div class="mod-card">
       <div class="mod-head">
         <div class="mod-ic">r</div>
         <div><div class="mod-title">Driver analysis</div><div class="mod-subtitle">Correlations + OLS regression — what actually moves ${metricCol}</div></div>
       </div>
       <div class="mod-body">
-        ${ols ? `<div class="stats-row">
-          <div class="stat-c"><div class="stat-lbl">OLS R²</div><div class="stat-val pos">${(ols.r2 * 100).toFixed(1)}%</div></div>
-          <div class="stat-c"><div class="stat-lbl">Adj-R²</div><div class="stat-val pos">${(ols.adjR2 * 100).toFixed(1)}%</div></div>
-          <div class="stat-c"><div class="stat-lbl">Top driver</div><div class="stat-val neu">${esc(pearsonPairs[0]?.name || '—')}</div></div>
-        </div>`: ''}
-        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('correlations', 'plain_english'))}</div></div>
+        ${ols?`<div class="stats-row">
+          <div class="stat-c"><div class="stat-lbl">OLS R²</div><div class="stat-val pos">${(ols.r2*100).toFixed(1)}%</div></div>
+          <div class="stat-c"><div class="stat-lbl">Adj-R²</div><div class="stat-val pos">${(ols.adjR2*100).toFixed(1)}%</div></div>
+          <div class="stat-c"><div class="stat-lbl">Top driver</div><div class="stat-val neu">${esc(pearsonPairs[0]?.name||'—')}</div></div>
+        </div>`:''}
+        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('correlations','plain_english'))}</div></div>
         <div style="margin-bottom:18px">
-          ${pearsonPairs?.map(p => `<div class="driver-row">
+          ${pearsonPairs?.map(p=>`<div class="driver-row">
             <span class="d-lbl">${esc(p.name)}</span>
-            <div class="bar-w"><div class="bar-f" style="width:${Math.abs(p.r) / maxR * 100}%;background:${p.r > 0 ? '#40C18D' : '#F8414C'}"></div></div>
-            <span class="d-val" style="color:${p.r > 0 ? 'var(--teal)' : 'var(--red)'}">${p.r > 0 ? '+' : ''}${p.r.toFixed(3)}</span>
+            <div class="bar-w"><div class="bar-f" style="width:${Math.abs(p.r)/maxR*100}%;background:${p.r>0?'#40C18D':'#F8414C'}"></div></div>
+            <span class="d-val" style="color:${p.r>0?'var(--teal)':'var(--red)'}">${p.r>0?'+':''}${p.r.toFixed(3)}</span>
             <span class="d-sig">${pFmt(p.p)}</span>
           </div>`).join('') || '<span style="font-family:var(--mono);font-size:12px;color:var(--dim)">No numerical predictors found.</span>'}
         </div>
-        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('correlations', 'what_now'))}</div></div>
-        <div class="tech-row"><span class="tech-tag">Pearson correlation</span>${ols ? `<span class="tech-tag">OLS multiple regression</span>` : ''}</div>
+        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('correlations','what_now'))}</div></div>
+        <div class="tech-row"><span class="tech-tag">Pearson correlation</span>${ols?`<span class="tech-tag">Multivariate OLS Regression</span>`:''}${grain==='day' && olsNames?.includes('Tue')?'<span class="tech-tag">Includes DoW Dummies</span>':''}</div>
       </div>
     </div>`;
 
-        const anomHTML = `
+  const anomHTML=`
     <div class="mod-card">
       <div class="mod-head">
         <div class="mod-ic">⚠</div>
-        <div><div class="mod-title">Anomaly detection</div><div class="mod-subtitle">IQR × 1.5 bounds + z-score > 2.0 — ${anom?.outliers?.length || 0} outlier${anom?.outliers?.length !== 1 ? 's' : ''} detected</div></div>
+        <div><div class="mod-title">Anomaly detection</div><div class="mod-subtitle">IQR × 1.5 bounds + z-score > 2.0 — ${anom?.outliers?.length||0} outlier${anom?.outliers?.length!==1?'s':''} detected</div></div>
       </div>
       <div class="mod-body">
         <div class="stats-row">
-          <div class="stat-c"><div class="stat-lbl">IQR lower</div><div class="stat-val neu">${fmt(anom?.lo || 0)}</div></div>
-          <div class="stat-c"><div class="stat-lbl">IQR upper</div><div class="stat-val neu">${fmt(anom?.hi || 0)}</div></div>
-          <div class="stat-c"><div class="stat-lbl">Outliers found</div><div class="stat-val ${anom?.outliers?.length ? 'warn' : 'pos'}">${anom?.outliers?.length || 0}</div></div>
+          <div class="stat-c"><div class="stat-lbl">IQR lower</div><div class="stat-val neu">${fmt(anom?.lo||0)}</div></div>
+          <div class="stat-c"><div class="stat-lbl">IQR upper</div><div class="stat-val neu">${fmt(anom?.hi||0)}</div></div>
+          <div class="stat-c"><div class="stat-lbl">Outliers found</div><div class="stat-val ${anom?.outliers?.length?'warn':'pos'}">${anom?.outliers?.length||0}</div></div>
         </div>
-        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('anomalies', 'plain_english'))}</div></div>
-        ${anom?.outliers?.length ? `<div style="margin-bottom:16px">${anom.outliers.map(o => `<div class="driver-row">
+        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('anomalies','plain_english'))}</div></div>
+        ${anom?.outliers?.length?`<div style="margin-bottom:16px">${anom.outliers.map(o=>`<div class="driver-row">
           <span class="d-lbl">${esc(o.date)}</span>
-          <div class="bar-w"><div class="bar-f" style="width:${Math.min(100, Math.abs(o.z) / 3 * 100)}%;background:${o.direction === 'high' ? 'var(--amber)' : 'var(--red)'}"></div></div>
-          <span class="d-val" style="color:${o.direction === 'high' ? 'var(--amber)' : 'var(--red)'}">${fmt(o.value)}</span>
-          <span class="d-sig">z=${o.z > 0 ? '+' : ''}${o.z.toFixed(2)}</span>
-        </div>`).join('')}</div>` : '<div style="font-family:var(--mono);font-size:12px;color:var(--teal);margin-bottom:16px;padding:12px;background:rgba(64,193,141,.06);border-radius:8px">No outliers detected — distribution is consistent.</div>'}
-        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('anomalies', 'what_now'))}</div></div>
+          <div class="bar-w"><div class="bar-f" style="width:${Math.min(100,Math.abs(o.z)/3*100)}%;background:${o.direction==='high'?'var(--amber)':'var(--red)'}"></div></div>
+          <span class="d-val" style="color:${o.direction==='high'?'var(--amber)':'var(--red)'}">${fmt(o.value)}</span>
+          <span class="d-sig">z=${o.z>0?'+':''}${o.z.toFixed(2)}</span>
+        </div>`).join('')}</div>`:'<div style="font-family:var(--mono);font-size:12px;color:var(--teal);margin-bottom:16px;padding:12px;background:rgba(64,193,141,.06);border-radius:8px">No outliers detected — distribution is consistent.</div>'}
+        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('anomalies','what_now'))}</div></div>
         <div class="tech-row"><span class="tech-tag">IQR × 1.5 method</span><span class="tech-tag">z-score threshold: |z| > 2.0</span></div>
       </div>
     </div>`;
 
-        // Trim WoW/YoY to most recent 10 to avoid massive lists on daily data
-        const recentYoy = yoy_data && yoy_data.length > 0
-          ? [...yoy_data].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10)
-          : [];
-        const maxAbsYoy = recentYoy.length ? Math.max(...recentYoy.map(y => Math.abs(y.yoy))) : 1;
+  const recentYoy = yoy_data && yoy_data.length > 0 
+      ? [...yoy_data].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0, 10) 
+      : [];
+  const maxAbsYoy=recentYoy.length?Math.max(...recentYoy.map(y=>Math.abs(y.yoy))):1;
 
-        const yoyHTML = `
+  const yoyHTML=`
     <div class="mod-card">
       <div class="mod-head">
         <div class="mod-ic">%</div>
-        <div><div class="mod-title">${{ wow: 'Week-over-week', mom: 'Month-over-month', yoy: 'Year-over-year' }[compMode] || 'Period'} comparison</div><div class="mod-subtitle">${yoy_data?.length || 0} comparable periods · ${grain || 'auto'} grain found</div></div>
+        <div><div class="mod-title">${{wow:'Week-over-week',mom:'Month-over-month',yoy:'Year-over-year'}[compMode]||'Period'} comparison</div><div class="mod-subtitle">${yoy_data?.length||0} comparable periods · ${grain||'auto'} grain found</div></div>
       </div>
       <div class="mod-body">
-        ${yoy_data?.length ? `<div class="stats-row">
-          <div class="stat-c"><div class="stat-lbl">Mean ${{ wow: 'WoW', mom: 'MoM', yoy: 'YoY' }[compMode] || 'PoP'}</div><div class="stat-val ${Stats.mean(yoy_data.map(y => y.yoy)) > 0 ? 'pos' : 'neg'}">${Stats.mean(yoy_data.map(y => y.yoy)) > 0 ? '+' : ''}${Stats.mean(yoy_data.map(y => y.yoy)).toFixed(1)}%</div></div>
-          <div class="stat-c"><div class="stat-lbl">Best period</div><div class="stat-val pos">${([...yoy_data].sort((a, b) => b.yoy - a.yoy)[0]?.date || '—')} (+${([...yoy_data].sort((a, b) => b.yoy - a.yoy)[0]?.yoy ?? 0).toFixed(1)}%)</div></div>
-          <div class="stat-c"><div class="stat-lbl">Worst period</div><div class="stat-val neg">${([...yoy_data].sort((a, b) => a.yoy - b.yoy)[0]?.date || '—')} (${([...yoy_data].sort((a, b) => a.yoy - b.yoy)[0]?.yoy ?? 0).toFixed(1)}%)</div></div>
-        </div>`: ``}
-        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('yoy', 'plain_english') || 'No comparable periods found — need more data.')}</div></div>
-        ${recentYoy.length ? `<div style="margin-bottom:16px">${recentYoy.map(y => `<div class="driver-row">
+        ${yoy_data?.length?`<div class="stats-row">
+          <div class="stat-c"><div class="stat-lbl">Mean ${{wow:'WoW',mom:'MoM',yoy:'YoY'}[compMode]||'PoP'}</div><div class="stat-val ${Stats.mean(yoy_data.map(y=>y.yoy))>0?'pos':'neg'}">${Stats.mean(yoy_data.map(y=>y.yoy))>0?'+':''}${Stats.mean(yoy_data.map(y=>y.yoy)).toFixed(1)}%</div></div>
+          <div class="stat-c"><div class="stat-lbl">Best period</div><div class="stat-val pos">${([...yoy_data].sort((a,b)=>b.yoy-a.yoy)[0]?.date||'—')} (+${([...yoy_data].sort((a,b)=>b.yoy-a.yoy)[0]?.yoy??0).toFixed(1)}%)</div></div>
+          <div class="stat-c"><div class="stat-lbl">Worst period</div><div class="stat-val neg">${([...yoy_data].sort((a,b)=>a.yoy-b.yoy)[0]?.date||'—')} (${([...yoy_data].sort((a,b)=>a.yoy-b.yoy)[0]?.yoy??0).toFixed(1)}%)</div></div>
+        </div>`:``}
+        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('yoy','plain_english')||'No comparable periods found — need more data.')}</div></div>
+        ${recentYoy.length?`<div style="margin-bottom:16px">${recentYoy.map(y=>`<div class="driver-row">
           <span class="d-lbl">${esc(y.date)}</span>
-          <div class="bar-w"><div class="bar-f" style="width:${Math.abs(y.yoy) / maxAbsYoy * 100}%;background:${y.yoy > 0 ? '#40C18D' : '#F8414C'}"></div></div>
-          <span class="d-val" style="color:${y.yoy > 0 ? 'var(--teal)' : 'var(--red)'}">${y.yoy > 0 ? '+' : ''}${y.yoy.toFixed(1)}%</span>
+          <div class="bar-w"><div class="bar-f" style="width:${Math.abs(y.yoy)/maxAbsYoy*100}%;background:${y.yoy>0?'#40C18D':'#F8414C'}"></div></div>
+          <span class="d-val" style="color:${y.yoy>0?'var(--teal)':'var(--red)'}">${y.yoy>0?'+':''}${y.yoy.toFixed(1)}%</span>
           <span class="d-sig">${fmt(y.value)}</span>
         </div>`).join('')}
         ${yoy_data.length > 10 ? `<div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-align:center;padding-top:10px">Showing 10 most recent periods</div>` : ''}
-        </div>`: ''}
-        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('yoy', 'what_now'))}</div></div>
+        </div>`:''}
+        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('yoy','what_now'))}</div></div>
       </div>
     </div>`;
 
-        let channelsHTML = '';
-        const chMod = narrative.modules?.find(m => m.id === 'channels');
+  let channelsHTML = '';
+  const chMod = narrative.modules?.find(m => m.id === 'channels');
+  
+  if (chMod && stats?.channel_breakdown && stats.channel_breakdown.data.length > 0) {
+    const maxShare = stats.channel_breakdown.data[0].share_pct;
+    const topChName = stats.channel_breakdown.data[0].name;
+    const isConcentrated = maxShare > 50;
 
-        if (chMod && stats?.channel_breakdown && stats.channel_breakdown.data.length > 0) {
-          const maxShare = stats.channel_breakdown.data[0].share_pct;
-          const topChName = stats.channel_breakdown.data[0].name;
-          const isConcentrated = maxShare > 50;
-
-          channelsHTML = `
+    channelsHTML = `
     <div class="mod-card" id="mc-channels">
       <div class="mod-head">
         <div class="mod-ic">⑆</div>
@@ -1906,7 +1036,7 @@ Return ONLY valid JSON (no markdown, no preamble):
             return `
             <div class="driver-row" style="grid-template-columns: 100px 1fr 60px 80px;">
               <span class="d-lbl" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(ch.name)}</span>
-              <div class="bar-w"><div class="bar-f" style="width:${(ch.share_pct / maxShare) * 100}%;background:${barColor}"></div></div>
+              <div class="bar-w"><div class="bar-f" style="width:${(ch.share_pct/maxShare)*100}%;background:${barColor}"></div></div>
               <span class="d-val" style="color:var(--text); text-align: right;">${ch.share_pct}%</span>
               <span class="d-sig">${fmt(ch.value)}</span>
             </div>
@@ -1917,228 +1047,214 @@ Return ONLY valid JSON (no markdown, no preamble):
         <div class="tech-row"><span class="tech-tag">Volume Distribution</span><span class="tech-tag">Overall Vol: ${fmt(stats.channel_breakdown.total_volume)}</span></div>
       </div>
     </div>`;
-        }
+  }
 
-        const container = document.getElementById('results-container');
+  const container=document.getElementById('results-container');
+  const sharedBanner = isShared ? `<div class="shared-banner no-print"><span>You are viewing a shared analysis. Data is read-only.</span><button class="btn btn-g" style="padding: 4px 10px; font-size: 11px;" onclick="window.location.hash=''; window.location.reload();">Run New Analysis</button></div>` : '';
 
-        // Notice Banner for Shared Links
-        const sharedBanner = isShared ? `<div class="shared-banner no-print"><span>You are viewing a shared analysis. Data is read-only.</span><button class="btn btn-g" style="padding: 4px 10px; font-size: 11px;" onclick="window.location.hash=''; window.location.reload();">Run New Analysis</button></div>` : '';
-
-        container.innerHTML = `
+  container.innerHTML=`
     ${sharedBanner}
     <div class="r-header">
-      <div class="r-headline">${esc(narrative.headline || 'Analysis complete')}</div>
+      <div class="r-headline">${esc(narrative.headline||'Analysis complete')}</div>
       <div class="r-meta">
         <span>${esc(metricCol)}</span>
-        <span>${Y.length} periods${stats?.date_range ? ` · ${stats.date_range[0]} – ${stats.date_range[1]}` : ''}</span>
+        <span>${Y.length} periods${stats?.date_range?` · ${stats.date_range[0]} – ${stats.date_range[1]}`:''}</span>
         <span>Local stats + Claude narrative</span>
       </div>
     </div>
     ${channelsHTML}${trendHTML}${seasonHTML}${corrHTML}${anomHTML}${yoyHTML}`;
 
-        // Hide the initial inputs if shared
-        if (isShared) {
-          document.getElementById('sec-upload').classList.add('hidden');
-          document.getElementById('sec-ctx').classList.add('hidden');
-          document.getElementById('hero-text').classList.add('hidden');
-          document.getElementById('key-banner').classList.add('hidden');
-          document.getElementById('btn-share').classList.add('hidden');
-        }
+  if(isShared) {
+    document.getElementById('sec-upload').classList.add('hidden');
+    document.getElementById('sec-ctx').classList.add('hidden');
+    document.getElementById('hero-text').classList.add('hidden');
+    document.getElementById('key-banner').classList.add('hidden');
+    document.getElementById('btn-share').classList.add('hidden');
+  }
 
-        show('sec-results');
+  show('sec-results');
 
-        // Initialize charts after DOM settles
-        setTimeout(() => {
-          const tc = document.getElementById('chart-trend');
-          if (tc) {
-            const fitted = T.map(t => trend.slope * t + trend.intercept);
-            chartRegistry.push(new Chart(tc, { type: 'line', data: { labels: dates, datasets: [{ label: metricCol, data: Y, borderColor: '#2A52D8', borderWidth: 2, pointRadius: 3, tension: .35, fill: false }, { label: 'trend', data: fitted, borderColor: 'rgba(64,193,141,0.6)', borderWidth: 1.5, borderDash: [5, 3], pointRadius: 0, fill: false }] }, options: chartOpts() }));
-          }
-          const sc = document.getElementById('chart-season');
-          if (sc && si_entries.length) {
-            const sis = Object.entries(si_data).sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
-            const siVals = sis.map(([, v]) => v);
-            chartRegistry.push(new Chart(sc, { type: 'bar', data: { labels: sis.map(([m]) => { const mi = parseInt(m); return (mi >= 1 && mi <= 12) ? months_en[mi - 1] : String(m); }), datasets: [{ label: 'seasonal index', data: siVals, backgroundColor: siVals.map(v => v > 1 ? 'rgba(64,193,141,0.6)' : 'rgba(248,65,76,0.5)'), borderRadius: 4 }] }, options: { ...chartOpts(), plugins: { legend: { display: false } }, scales: { ...chartOpts().scales, y: { ...chartOpts().scales.y, ticks: { ...chartOpts().scales.y.ticks, callback: v => `${(v * 100).toFixed(0)}%` } } } } }));
-          }
-        }, 150);
-      } catch (err) {
-        console.error('renderResults crash:', err);
-        document.getElementById('results-container').innerHTML += '<div style="margin-top:12px;padding:10px 14px;background:rgba(248,65,76,.08);border:1px solid rgba(248,65,76,.2);border-radius:8px;font-family:var(--mono);font-size:11px;color:var(--red)">Render error: ' + (err.message || err) + ' — open browser console (F12) for the exact line</div>';
-        show('sec-results');
-      }
+  setTimeout(()=>{
+    const tc=document.getElementById('chart-trend');
+    if(tc){
+      const fitted=T.map(t=>trend.slope*t+trend.intercept);
+      chartRegistry.push(new Chart(tc,{type:'line',data:{labels:dates,datasets:[{label:metricCol,data:Y,borderColor:'#2A52D8',borderWidth:2,pointRadius:3,tension:.35,fill:false},{label:'trend',data:fitted,borderColor:'rgba(64,193,141,0.6)',borderWidth:1.5,borderDash:[5,3],pointRadius:0,fill:false}]},options:chartOpts()}));
     }
-
-    function chartOpts() {
-      return { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, labels: { color: '#7B8B8E', font: { size: 10 }, boxWidth: 10, padding: 12 } } }, scales: { x: { ticks: { color: '#7B8B8E', font: { size: 10 }, maxTicksLimit: 12 }, grid: { color: 'rgba(255,255,255,0.03)' } }, y: { ticks: { color: '#7B8B8E', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.03)' } } } };
+    const sc=document.getElementById('chart-season');
+    if(sc && seasonDataToRender.length){
+      chartRegistry.push(new Chart(sc,{type:'bar',data:{labels:seasonLabels,datasets:[{label:'season index',data:seasonDataToRender,backgroundColor:seasonDataToRender.map(v=>v>1?'rgba(64,193,141,0.6)':'rgba(248,65,76,0.5)'),borderRadius:4}]},options:{...chartOpts(),plugins:{legend:{display:false}},scales:{...chartOpts().scales,y:{...chartOpts().scales.y,ticks:{...chartOpts().scales.y.ticks,callback:v=>`${(v*100).toFixed(0)}%`}}}}}));
     }
+  },150);
+  } catch(err) {
+    console.error('renderResults crash:', err);
+    document.getElementById('results-container').innerHTML += '<div style="margin-top:12px;padding:10px 14px;background:rgba(248,65,76,.08);border:1px solid rgba(248,65,76,.2);border-radius:8px;font-family:var(--mono);font-size:11px;color:var(--red)">Render error: ' + (err.message||err) + ' — open browser console (F12) for the exact line</div>';
+    show('sec-results');
+  }
+}
 
-    function renderError(msg) {
-      document.getElementById('results-container').innerHTML = `<div style="background:rgba(248,65,76,.08);border:1px solid rgba(248,65,76,.2);border-radius:9px;padding:18px 22px;font-family:var(--mono);font-size:13px;color:var(--red)">Analysis error: ${esc(msg)}<br><button class="btn btn-g" onclick="resetAll()" style="margin-top:12px;font-size:12px">Try again</button></div>`;
-      show('sec-results');
-    }
+function chartOpts(){
+  return{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,labels:{color:'#7B8B8E',font:{size:10},boxWidth:10,padding:12}}},scales:{x:{ticks:{color:'#7B8B8E',font:{size:10},maxTicksLimit:12},grid:{color:'rgba(255,255,255,0.03)'}},y:{ticks:{color:'#7B8B8E',font:{size:10}},grid:{color:'rgba(255,255,255,0.03)'}}}};
+}
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  UI UTILITIES & SHARE
-    // ═══════════════════════════════════════════════════════════════════════════
-    function show(id) {
-      const el = document.getElementById(id);
-      el.classList.remove('hidden');
-      if (id === 'sec-ctx') populateMetricSelector();
-      setTimeout(() => { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 80);
-    }
+function renderError(msg){
+  document.getElementById('results-container').innerHTML=`<div style="background:rgba(248,65,76,.08);border:1px solid rgba(248,65,76,.2);border-radius:9px;padding:18px 22px;font-family:var(--mono);font-size:13px;color:var(--red)">Analysis error: ${esc(msg)}<br><button class="btn btn-g" onclick="resetAll()" style="margin-top:12px;font-size:12px">Try again</button></div>`;
+  show('sec-results');
+}
 
-    function populateMetricSelector() {
-      const metrics = detectedCols.filter(c => c.role === 'metric');
-      const opts = document.getElementById('metric-select-opts');
-      if (!opts) return;
-      const block = document.getElementById('metric-sel-block');
-      if (metrics.length <= 1) {
-        if (block) block.style.display = 'none';
-        return;
-      }
-      if (block) block.style.display = '';
-      opts.innerHTML = metrics.map(c => `<div class="q-opt ${ctx.metric === c.name ? 'on' : ''}" onclick="ctx.metric='${c.name.replace(/'/g, "\\'")}';document.querySelectorAll('#metric-select-opts .q-opt').forEach(o=>o.classList.remove('on'));this.classList.add('on')">${esc(c.name)}</div>`).join('');
-      if (!ctx.metric || !metrics.find(c => c.name === ctx.metric)) {
-        ctx.metric = metrics[0]?.name || '';
-        opts.querySelector('.q-opt')?.classList.add('on');
-      }
-    }
-    function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
-    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-    function toggleTestMode() { const t = document.getElementById('sec-test'); if (t.classList.contains('hidden')) { show('sec-test'); runTests(); } else { t.classList.add('hidden'); } }
+function show(id){
+  const el=document.getElementById(id);
+  el.classList.remove('hidden');
+  if(id==='sec-ctx') populateMetricSelector();
+  setTimeout(()=>{el.scrollIntoView({behavior:'smooth',block:'start'});},80);
+}
 
-    function showToast(msg) {
-      const toast = document.getElementById('toast');
-      toast.innerText = msg;
-      toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 3000);
-    }
+function populateMetricSelector(){
+  const metrics=detectedCols.filter(c=>c.role==='metric');
+  const opts=document.getElementById('metric-select-opts');
+  if(!opts) return;
+  const block=document.getElementById('metric-sel-block');
+  if(metrics.length<=1){
+    if(block) block.style.display='none';
+    return;
+  }
+  if(block) block.style.display='';
+  opts.innerHTML=metrics.map(c=>`<div class="q-opt ${ctx.metric===c.name?'on':''}" onclick="ctx.metric='${c.name.replace(/'/g,"\\'")}';document.querySelectorAll('#metric-select-opts .q-opt').forEach(o=>o.classList.remove('on'));this.classList.add('on')">${esc(c.name)}</div>`).join('');
+  if(!ctx.metric||!metrics.find(c=>c.name===ctx.metric)){
+    ctx.metric=metrics[0]?.name||'';
+    opts.querySelector('.q-opt')?.classList.add('on');
+  }
+}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function toggleTestMode(){const t=document.getElementById('sec-test');if(t.classList.contains('hidden')){show('sec-test');runTests();}else{t.classList.add('hidden');}}
 
-    function generateShareLink() {
-      if (!lastRunPayload) return;
-      try {
-        // We minify the data to ensure the URL doesn't break browser length limits.
-        // Omit large arrays like yoy_data or full anomaly list; keep narrative, summary stats, and chart data (capped).
-        const st = lastRunPayload;
-        const mini = {
-          isShared: true,
-          narrative: st.narrative,
-          stats: st.stats,
-          metricCol: st.metricCol,
-          desc: st.desc,
-          dates: st.dates.slice(-50), // last 50 periods for the chart
-          Y: st.Y.slice(-50),
-          T: st.T.slice(-50),
-          trend: { slope: st.trend.slope, intercept: st.trend.intercept, r2: st.trend.r2, pval: st.trend.pval },
-          si_data: st.si_data,
-          pearsonPairs: st.pearsonPairs?.map(p => ({ name: p.name, r: p.r, p: p.p })) || [],
-          ols: st.ols ? { r2: st.ols.r2, adjR2: st.ols.adjR2 } : null,
-          anom: { lo: st.anom.lo, hi: st.anom.hi, outliers: st.anom.outliers?.slice(0, 10) },
-          yoy_data: st.yoy_data.slice(-10), // only need the 10 UI displays
-          grain: st.grain,
-          compMode: st.compMode
-        };
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.innerText = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
 
-        const encoded = btoa(encodeURIComponent(JSON.stringify(mini)));
-        const url = window.location.origin + window.location.pathname + '#s=' + encoded;
+function generateShareLink() {
+  if (!lastRunPayload) return;
+  try {
+    const st = lastRunPayload;
+    const mini = {
+      isShared: true,
+      narrative: st.narrative,
+      stats: st.stats,
+      metricCol: st.metricCol,
+      desc: st.desc,
+      dates: st.dates.slice(-50), 
+      Y: st.Y.slice(-50),
+      T: st.T.slice(-50),
+      trend: { slope: st.trend.slope, intercept: st.trend.intercept, r2: st.trend.r2, pval: st.trend.pval },
+      si_data: st.si_data,
+      dow_data: st.dow_data,
+      pearsonPairs: st.pearsonPairs?.map(p => ({name: p.name, r: p.r, p: p.p})) || [],
+      ols: st.ols ? {r2: st.ols.r2, adjR2: st.ols.adjR2} : null,
+      olsNames: st.olsNames,
+      anom: { lo: st.anom.lo, hi: st.anom.hi, outliers: st.anom.outliers?.slice(0,10) },
+      yoy_data: st.yoy_data.slice(-10), 
+      grain: st.grain,
+      compMode: st.compMode
+    };
 
-        navigator.clipboard.writeText(url).then(() => {
-          showToast('Link copied! Note: Some older chart data is truncated in shared links to fit URL limits.');
-        });
-      } catch (e) {
-        showToast('Dataset too large to encode into a shareable URL.');
-      }
-    }
-
-    function resetAll() {
-      parsedData = null; detectedCols = null; ctx.goal = null; lastRunPayload = null;
-      ['sec-ctx', 'sec-run', 'sec-results', 'sec-test'].forEach(id => document.getElementById(id).classList.add('hidden'));
-      document.getElementById('schema-wrap').classList.add('hidden');
-      document.getElementById('schema-cols').innerHTML = '';
-      ctx.metric = '';
-      document.getElementById('results-container').innerHTML = '';
-      document.getElementById('paste-area').value = '';
-      document.getElementById('focus-inp').value = '';
-      document.querySelectorAll('.q-opt').forEach(o => o.classList.remove('on'));
-      ctx.comp = 'yoy';
-      document.querySelector('.q-opt[data-v="yoy"]')?.classList.add('on');
-      chartRegistry.forEach(c => c.destroy()); chartRegistry.length = 0;
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      window.location.hash = ''; // Clear hash
-    }
-
-    // ── API Key management ────────────────────────────────────────────────────
-    const KEY_LS = 'sk_anthropic_key';
-
-    function getKey() { return (localStorage.getItem(KEY_LS) || '').replace(/[^\x20-\x7E]/g, '').trim(); }
-
-    function initKeyBanner() {
-      const key = getKey();
-      if (key) showKeySaved(key);
-    }
-
-    function saveKey() {
-      const val = document.getElementById('key-input').value.replace(/[^\x20-\x7E]/g, '').trim();
-      if (!val.startsWith('sk-')) {
-        document.getElementById('key-input').style.borderColor = 'var(--red)';
-        setTimeout(() => document.getElementById('key-input').style.borderColor = '', 1200);
-        return;
-      }
-      localStorage.setItem(KEY_LS, val);
-      showKeySaved(val);
-    }
-
-    function showKeySaved(key) {
-      const banner = document.getElementById('key-banner');
-      const inputRow = document.getElementById('key-input-row');
-      const savedRow = document.getElementById('key-saved-row');
-      const icon = document.getElementById('key-icon');
-      const title = document.getElementById('key-title');
-      const sub = document.getElementById('key-sub');
-      banner.classList.add('ok');
-      icon.textContent = '\u2713';
-      icon.style.background = 'rgba(64,193,141,.12)';
-      title.textContent = 'API key connected';
-      sub.textContent = '...\u00B7\u00B7\u00B7' + key.slice(-8);
-      inputRow.style.display = 'none';
-      savedRow.style.display = 'flex';
-    }
-
-    function changeKey() {
-      const banner = document.getElementById('key-banner');
-      const inputRow = document.getElementById('key-input-row');
-      const savedRow = document.getElementById('key-saved-row');
-      const icon = document.getElementById('key-icon');
-      const title = document.getElementById('key-title');
-      const sub = document.getElementById('key-sub');
-      localStorage.removeItem(KEY_LS);
-      banner.classList.remove('ok');
-      icon.textContent = '🔑';
-      icon.style.background = 'rgba(255,184,0,.12)';
-      title.textContent = 'Anthropic API key required for AI narratives';
-      sub.textContent = 'Stats run locally \u2014 key is only used to generate plain-English explanations. Saved to your browser only, never transmitted anywhere else.';
-      inputRow.style.display = 'flex';
-      savedRow.style.display = 'none';
-      document.getElementById('key-input').value = '';
-    }
-
-    // ── On Load: Check Hash ──
-    window.addEventListener('DOMContentLoaded', () => {
-      initKeyBanner();
-
-      if (window.location.hash.startsWith('#s=')) {
-        try {
-          const decodedStr = decodeURIComponent(atob(window.location.hash.substring(3)));
-          const sharedPayload = JSON.parse(decodedStr);
-          renderResults(sharedPayload);
-        } catch (e) {
-          console.error('Failed to load shared payload', e);
-          window.location.hash = ''; // clear bad hash
-        }
-      }
+    const encoded = btoa(encodeURIComponent(JSON.stringify(mini)));
+    const url = window.location.origin + window.location.pathname + '#s=' + encoded;
+    
+    navigator.clipboard.writeText(url).then(() => {
+      showToast('Link copied! Note: Some older chart data is truncated in shared links to fit URL limits.');
     });
+  } catch(e) {
+    showToast('Dataset too large to encode into a shareable URL.');
+  }
+}
 
-  </script>
+function resetAll(){
+  parsedData=null;detectedCols=null;ctx.goal=null; lastRunPayload=null;
+  ['sec-ctx','sec-run','sec-results','sec-test'].forEach(id=>document.getElementById(id).classList.add('hidden'));
+  document.getElementById('schema-wrap').classList.add('hidden');
+  document.getElementById('schema-cols').innerHTML='';
+  ctx.metric='';
+  document.getElementById('results-container').innerHTML='';
+  document.getElementById('paste-area').value='';
+  document.getElementById('focus-inp').value='';
+  document.querySelectorAll('.q-opt').forEach(o=>o.classList.remove('on'));
+  ctx.comp='yoy';
+  document.querySelector('.q-opt[data-v="yoy"]')?.classList.add('on');
+  chartRegistry.forEach(c=>c.destroy());chartRegistry.length=0;
+  window.scrollTo({top:0,behavior:'smooth'});
+  window.location.hash = ''; 
+}
+
+const KEY_LS = 'sk_anthropic_key';
+function getKey() { return (localStorage.getItem(KEY_LS) || '').replace(/[^\x20-\x7E]/g, '').trim(); }
+
+function initKeyBanner() {
+  const key = getKey();
+  if (key) showKeySaved(key);
+}
+
+function saveKey() {
+  const val = document.getElementById('key-input').value.replace(/[^\x20-\x7E]/g, '').trim();
+  if (!val.startsWith('sk-')) {
+    document.getElementById('key-input').style.borderColor = 'var(--red)';
+    setTimeout(() => document.getElementById('key-input').style.borderColor = '', 1200);
+    return;
+  }
+  localStorage.setItem(KEY_LS, val);
+  showKeySaved(val);
+}
+
+function showKeySaved(key) {
+  const banner = document.getElementById('key-banner');
+  const inputRow = document.getElementById('key-input-row');
+  const savedRow = document.getElementById('key-saved-row');
+  const icon = document.getElementById('key-icon');
+  const title = document.getElementById('key-title');
+  const sub = document.getElementById('key-sub');
+  banner.classList.add('ok');
+  icon.textContent = '\u2713';
+  icon.style.background = 'rgba(64,193,141,.12)';
+  title.textContent = 'API key connected';
+  sub.textContent = '...\u00B7\u00B7\u00B7' + key.slice(-8);
+  inputRow.style.display = 'none';
+  savedRow.style.display = 'flex';
+}
+
+function changeKey() {
+  const banner = document.getElementById('key-banner');
+  const inputRow = document.getElementById('key-input-row');
+  const savedRow = document.getElementById('key-saved-row');
+  const icon = document.getElementById('key-icon');
+  const title = document.getElementById('key-title');
+  const sub = document.getElementById('key-sub');
+  localStorage.removeItem(KEY_LS);
+  banner.classList.remove('ok');
+  icon.textContent = '🔑';
+  icon.style.background = 'rgba(255,184,0,.12)';
+  title.textContent = 'Anthropic API key required for AI narratives';
+  sub.textContent = 'Stats run locally \u2014 key is only used to generate plain-English explanations. Saved to your browser only, never transmitted anywhere else.';
+  inputRow.style.display = 'flex';
+  savedRow.style.display = 'none';
+  document.getElementById('key-input').value = '';
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  initKeyBanner();
+  if (window.location.hash.startsWith('#s=')) {
+    try {
+      const decodedStr = decodeURIComponent(atob(window.location.hash.substring(3)));
+      const sharedPayload = JSON.parse(decodedStr);
+      renderResults(sharedPayload);
+    } catch(e) {
+      console.error('Failed to load shared payload', e);
+      window.location.hash = ''; 
+    }
+  }
+});
+
+</script>
 </body>
-
 </html>
