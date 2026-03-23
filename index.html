@@ -463,6 +463,18 @@ const Stats = (() => {
   return {mean,stddev,stddevPop,linReg,pearson,olsMultiple,seasonalIndex,anomalies,yoyGrowth,describe,tpval};
 })();
 
+// ── Date normalization — handles YYYY-MM, YYYY-MM-DD, YYYYMMDD ───────────────
+function normalizeDate(d) {
+  const s = String(d).trim();
+  // YYYYMMDD → YYYY-MM
+  if (/^\d{8}$/.test(s)) return s.slice(0,4) + '-' + s.slice(4,6);
+  // YYYY-MM-DD or YYYY/MM/DD → YYYY-MM
+  if (/^\d{4}[-\/]\d{2}[-\/]\d{2}/.test(s)) return s.slice(0,7).replace('/','-');
+  // YYYY-MM already
+  if (/^\d{4}-\d{2}$/.test(s)) return s;
+  return s.slice(0,7);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  TEST SUITE — validates JS engine vs Python ground truth
 // ═══════════════════════════════════════════════════════════════════════════
@@ -610,10 +622,9 @@ async function runAnalysis(){
   if(!parsedData||!parsedData.length){alert('Upload a dataset first.');return;}
   show('sec-run');
 
-  const steps=['Detecting data structure','Computing trend & regression','Calculating seasonal index','Running correlation analysis','Detecting anomalies & outliers','Generating narrative via Claude AI'];
+  const steps=['Detecting data structure','Aggregating to monthly series','Computing trend & regression','Calculating seasonal index','Running correlation analysis','Generating narrative via Claude AI'];
   const prog=document.getElementById('prog-list');
   prog.innerHTML=steps.map((s,i)=>`<div class="prog-item" id="pi${i}"><div class="prog-dot"></div>${s}</div>`).join('');
-
   let si=0;
   const adv=()=>{
     if(si>0)document.getElementById(`pi${si-1}`)?.classList.replace('act','done');
@@ -624,58 +635,106 @@ async function runAnalysis(){
   adv();
 
   try {
-    // ── 1. Detect columns ──────────────────────────────────────────────────
+    // ── 1. Detect columns ────────────────────────────────────────────────────
     const numCols=detectedCols.filter(c=>c.type==='numeric').map(c=>c.name);
-    const dateCols=detectedCols.filter(c=>c.type==='date').map(c=>c.name);
+    // Also catch columns literally named 'date' that parser typed as text
+    const dateCols=detectedCols.filter(c=>c.type==='date'||c.name.toLowerCase()==='date').map(c=>c.name);
     const dateCol=dateCols[0]||null;
     const metricCol=guessMetric(numCols,ctx.metric)||numCols[0];
-    if(!metricCol){throw new Error('No numeric columns detected. Check your CSV format.');}
-    // Only use rows where metric column is a valid number — guarantees all arrays same length
-    const toNum=v=>typeof v==='number'?v:parseFloat(v);
-    const completeIdx=parsedData.map((_,i)=>i).filter(i=>!isNaN(toNum(parsedData[i][metricCol])));
-    if(completeIdx.length<3){throw new Error('Not enough valid rows in the metric column (need at least 3).');}
-    const getCol=col=>completeIdx.map(i=>{const v=toNum(parsedData[i][col]);return isNaN(v)?0:v;});
-    const Y=getCol(metricCol);
-    const rawDates=dateCol?completeIdx.map(i=>String(parsedData[i][dateCol]).slice(0,7)):[];
-    const dates=rawDates.length?rawDates:Y.map((_,i)=>`T${i+1}`);
-    const T=Y.map((_,i)=>i);
-    await sleep(700); adv();
+    if(!metricCol) throw new Error('No numeric columns detected. Check your CSV format.');
 
-    // ── 2. Core computations ───────────────────────────────────────────────
+    const toNum=v=>typeof v==='number'?v:parseFloat(v);
+
+    // ── 2. Aggregate by month (handles multi-row-per-date channel exports) ───
+    await sleep(500); adv();
+
+    let Y, dates, T;
+    if (dateCol) {
+      // Build month → sum map for metric and all numeric cols
+      const monthMetric={}, monthCols={};
+      numCols.forEach(c=>{ monthCols[c]={}; });
+
+      parsedData.forEach(row=>{
+        const rawDate = String(row[dateCol]||'').trim();
+        const mo = normalizeDate(rawDate); // normalize to YYYY-MM
+        if(!mo||mo.length<7) return;
+        const v = toNum(row[metricCol]);
+        if(isNaN(v)) return;
+        monthMetric[mo] = (monthMetric[mo]||0) + v;
+        numCols.forEach(c=>{
+          const cv=toNum(row[c]);
+          if(!isNaN(cv)) monthCols[c][mo]=(monthCols[c][mo]||0)+cv;
+        });
+      });
+
+      dates = Object.keys(monthMetric).sort();
+      if(dates.length < 3) throw new Error('Not enough distinct time periods after aggregation (need at least 3 months).');
+      Y = dates.map(m=>monthMetric[m]);
+      T = Y.map((_,i)=>i);
+
+      // Store aggregated cols for pearson (aligned to same months)
+      window._aggCols = {};
+      numCols.forEach(c=>{ window._aggCols[c] = dates.map(m=>monthCols[c][m]||0); });
+
+    } else {
+      // No date col — use rows as-is
+      const completeIdx=parsedData.map((_,i)=>i).filter(i=>!isNaN(toNum(parsedData[i][metricCol])));
+      if(completeIdx.length<3) throw new Error('Not enough valid rows (need at least 3).');
+      Y = completeIdx.map(i=>toNum(parsedData[i][metricCol]));
+      dates = Y.map((_,i)=>`T${i+1}`);
+      T = Y.map((_,i)=>i);
+      window._aggCols = {};
+      numCols.forEach(c=>{ window._aggCols[c]=completeIdx.map(i=>{const v=toNum(parsedData[i][c]);return isNaN(v)?0:v;}); });
+    }
+
+    await sleep(600); adv();
+
+    // ── 3. Core statistics ───────────────────────────────────────────────────
     const trend=Stats.linReg(T,Y);
-    const pearsonPairs=numCols.filter(c=>c!==metricCol).slice(0,4).map(c=>{
-      const X=getCol(c);const p=Stats.pearson(X,Y);return{name:c,r:p.r,p:p.pval,data:X};
-    }).sort((a,b)=>Math.abs(b.r)-Math.abs(a.r));
+
+    const pearsonPairs=numCols.filter(c=>c!==metricCol).slice(0,5).map(c=>{
+      const X=window._aggCols[c];
+      if(!X||X.length!==Y.length) return null;
+      const p=Stats.pearson(X,Y);
+      return {name:c,r:p.r,p:p.pval,data:X};
+    }).filter(Boolean).sort((a,b)=>Math.abs(b.r)-Math.abs(a.r));
+
     const topPredictors=pearsonPairs.slice(0,2).map(p=>p.data).filter(Boolean);
     const ols=topPredictors.length>0?Stats.olsMultiple([...topPredictors,T],Y):null;
     const si_data=dateCol?Stats.seasonalIndex(dates,Y):null;
     const anom=Stats.anomalies(Y,dates);
     const yoy_data=dateCol?Stats.yoyGrowth(dates,Y):[];
     const desc=Stats.describe(Y);
-    await sleep(600); adv(); await sleep(500); adv(); await sleep(500); adv();
 
-    // ── 3. Package for Claude narrative ───────────────────────────────────
+    await sleep(500); adv(); await sleep(400); adv();
+
+    // ── 4. Package for Claude ────────────────────────────────────────────────
+    const siEntries=si_data?Object.entries(si_data).sort((a,b)=>b[1]-a[1]):[];
     const statsPayload={
-      metric:metricCol,n:Y.length,date_range:dateCol?[dates[0],dates[dates.length-1]]:null,
+      metric:metricCol,
+      n:Y.length,
+      date_range:dateCol?[dates[0],dates[dates.length-1]]:null,
       trend:{slope:+trend.slope.toFixed(2),r2:+trend.r2.toFixed(4),p_value:+trend.pval.toFixed(4),direction:trend.slope>0?'increasing':'decreasing'},
-      seasonal:si_data?{peak:(Object.entries(si_data).sort((a,b)=>b[1]-a[1])[0]??null),trough:(Object.entries(si_data).sort((a,b)=>a[1]-b[1])[0]??null),amplitude:(si_data?+(((Math.max(...Object.values(si_data))-Math.min(...Object.values(si_data)))/2*100).toFixed(1)):null)}:null,
+      seasonal:si_data&&siEntries.length?{peak:siEntries[0],trough:siEntries[siEntries.length-1],amplitude:+(((siEntries[0][1]-siEntries[siEntries.length-1][1])/2*100).toFixed(1))}:null,
       correlations:pearsonPairs.slice(0,4).map(p=>({name:p.name,r:+p.r.toFixed(4),p:+p.p.toFixed(5)})),
-      ols:ols?{r2:+ols.r2.toFixed(4),adj_r2:+ols.adjR2.toFixed(4),predictors:pearsonPairs.slice(0,2).map((p,i)=>({name:p.name,coeff:+ols.coeffs[i+1].toFixed(4),p_value:+ols.pvals[i+1].toFixed(5)})),trend_coeff:+ols.coeffs[ols.coeffs.length-1].toFixed(2)}:null,
+      ols:ols?{r2:+ols.r2.toFixed(4),adj_r2:+ols.adjR2.toFixed(4),predictors:pearsonPairs.slice(0,2).map((p,i)=>({name:p.name,coeff:+ols.coeffs[i+1].toFixed(4),p_value:+ols.pvals[i+1].toFixed(5)}))}:null,
       anomalies:anom.outliers.map(o=>({date:o.date,value:+o.value.toFixed(0),z:o.z,direction:o.direction})),
       stats:{mean:+desc.mean.toFixed(2),std:+desc.std.toFixed(2),min:+desc.min.toFixed(2),max:+desc.max.toFixed(2)},
       yoy:yoy_data.slice(-8).map(y=>({date:y.date,pct:+y.yoy.toFixed(2)})),
       goal:ctx.goal||'general',
-      context:`Skiplagged.com. Revenue streams: direct booking service fees and affiliate/partner referral fees. Business context: ${ctx.focus||'full dataset analysis'}`
+      context:`Skiplagged.com — flight search with hidden-city ticketing. Revenue: direct booking service fees + affiliate/referral fees. ${ctx.focus||''}`
     };
 
     adv();
     const narrative=await callClaude(statsPayload);
     await sleep(300);
     renderResults({stats:statsPayload,narrative,Y,dates,T,trend,si_data,pearsonPairs,ols,anom,yoy_data,metricCol,desc,dateCol});
+
   } catch(e){
     renderError(e.message||String(e));
   }
 }
+
 
 function guessMetric(cols,hint){
   if(!hint) return cols.find(c=>/rev|fee|income|earnings|gmv/i.test(c))||cols[0];
