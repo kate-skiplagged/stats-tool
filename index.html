@@ -991,7 +991,12 @@ Metric analyzed: ${statsPayload.metric} (n=${statsPayload.n} periods${statsPaylo
 Statistical results:
 ${JSON.stringify(statsPayload, null, 2)}
 
-Return ONLY valid JSON (no markdown, no preamble):
+Return ONLY valid, parseable JSON (no markdown, no preamble). 
+CRITICAL RULES:
+1. You MUST escape all double quotes inside your text values (e.g., use \\" instead of "). Do not leave unescaped quotes inside strings.
+2. Do not include trailing commas at the end of lists or objects.
+
+Use this exact JSON structure:
 {
   "headline": "One sentence capturing the most important finding with specific numbers",
   "modules": [
@@ -1041,8 +1046,24 @@ Return ONLY valid JSON (no markdown, no preamble):
   const data=await res.json();
   const txt=data.content?.filter(c=>c.type==='text').map(c=>c.text).join('');
   if(!txt) throw new Error('No response from Claude');
-  const clean=txt.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
-  try{return JSON.parse(clean);}catch(e){const m=clean.match(/\{[\s\S]*\}/);if(m)return JSON.parse(m[0]);throw new Error('Could not parse Claude response');}
+  
+  let clean=txt.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+  // Strip trailing commas from arrays and objects before parsing
+  clean = clean.replace(/,\s*([\]}])/g, '$1');
+  
+  try{
+    return JSON.parse(clean);
+  }catch(e){
+    const m=clean.match(/\{[\s\S]*\}/);
+    if(m) {
+      try { 
+        return JSON.parse(m[0]); 
+      } catch(e2) { 
+        throw new Error('Claude returned malformed JSON with unescaped characters.'); 
+      }
+    }
+    throw new Error('Could not parse Claude response');
+  }
 }
 
 const chartRegistry=[];
