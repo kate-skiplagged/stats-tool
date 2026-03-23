@@ -385,24 +385,33 @@ const Stats = (() => {
   // ── OLS multiple regression — X is array of column arrays (no intercept col) ──
   function olsMultiple(Xcols, y) {
     const n=y.length, k=Xcols.length+1;
+    // Guard: need obs > params, valid cols, non-zero variance
+    if(n<=k+1||!Xcols.length||Xcols.some(c=>!c||c.length!==n)) return null;
+    if(y.reduce((s,v)=>s+(v-y.reduce((a,b)=>a+b,0)/n)**2,0)===0) return null;
     // Build design matrix with intercept
     const X = y.map((_,i)=>[1,...Xcols.map(c=>c[i])]);
     // Xt = transpose(X)
     const Xt = X[0].map((_,j)=>X.map(row=>row[j]));
+    if(!Xt||!Xt[0]) return null;
     // XtX
-    const XtX = Xt.map(row=>Xt[0].map((_,j)=>row.reduce((s,v,i)=>s+v*Xt[j][i],0)));
-    const Xty = Xt.map(row=>row.reduce((s,v,i)=>s+v*y[i],0));
+    const XtX = Xt.map(rowi=>Xt.map(rowj=>rowi.reduce((s,v,o)=>s+v*rowj[o],0)));
+    const Xty = Xt.map(rowi=>rowi.reduce((s,v,o)=>s+v*y[o],0));
     // Invert XtX using Gauss-Jordan
     const inv = invertMatrix([...XtX.map(r=>[...r])]);
     if (!inv) return null;
     const coeffs = inv.map(row=>row.reduce((s,v,i)=>s+v*Xty[i],0));
+    // Guard NaN/Inf coefficients (singular/near-singular)
+    if(coeffs.some(c=>isNaN(c)||!isFinite(c))) return null;
     const yhat = X.map(row=>row.reduce((s,v,i)=>s+v*coeffs[i],0));
     const ssres = y.reduce((s,v,i)=>s+(v-yhat[i])**2,0);
-    const sstot = y.reduce((s,v)=>s+(v-mean(y))**2,0);
+    const sstot = y.reduce((s,v)=>s+(v-y.reduce((a,b)=>a+b,0)/n)**2,0);
+    if(sstot===0||ssres<0) return null;
     const r2 = 1-ssres/sstot;
     const adjR2 = 1-(1-r2)*(n-1)/(n-k-1);
     const mse = ssres/(n-k);
+    if(mse<=0) return null;
     const seCoeffs = inv.map((row,i)=>Math.sqrt(mse*inv[i][i]));
+    if(seCoeffs.some(s=>isNaN(s)||!isFinite(s)||s<=0)) return null;
     const tstats = coeffs.map((c,i)=>c/seCoeffs[i]);
     const pvals = tstats.map(t=>tpval(t, n-k));
     return {coeffs,r2,adjR2,seCoeffs,tstats,pvals,ssres,mse};
@@ -806,7 +815,9 @@ async function runAnalysis(){
       return {name:c,r:p.r,p:p.pval,data:X};
     }).filter(Boolean).sort((a,b)=>Math.abs(b.r)-Math.abs(a.r));
 
-    const topPredictors=pearsonPairs.slice(0,2).map(p=>p.data).filter(Boolean);
+    // Only use predictors with meaningful correlation (|r| > 0.1) to avoid singular matrices
+    const strongPredictors=pearsonPairs.filter(p=>Math.abs(p.r)>0.1).slice(0,2);
+    const topPredictors=strongPredictors.map(p=>p.data).filter(Boolean);
     const ols=topPredictors.length>0?Stats.olsMultiple([...topPredictors,T],Y):null;
     // Only compute seasonal index for month grain (day/week grain = use period comparison instead)
     const si_data=(dateCol&&grain==='month')?Stats.seasonalIndex(dates,Y):null;
