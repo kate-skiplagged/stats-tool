@@ -530,7 +530,7 @@ const Stats = (() => {
       const prevD = shiftDate(d, grain, steps);
       if (map[prevD] != null) {
         const pct = (values[i] - map[prevD]) / map[prevD] * 100;
-        result.push({ date: d, prev_date: prevD, value: values[i], prev_value: map[prevD], pct });
+        result.push({ date: d, prev_date: prevD, value: values[i], prev_value: map[prevD], pct, yoy: pct });
       }
     });
     return result;
@@ -838,13 +838,13 @@ async function runAnalysis(){
       metric:metricCol,
       n:Y.length,
       date_range:dateCol?[dates[0],dates[dates.length-1]]:null,
-      trend:{slope:+trend.slope.toFixed(2),r2:+trend.r2.toFixed(4),p_value:+trend.pval.toFixed(4),direction:trend.slope>0?'increasing':'decreasing'},
+      trend:{slope:+((trend.slope??0).toFixed(2)),r2:+((trend.r2??0).toFixed(4)),p_value:+((trend.pval??1).toFixed(4)),direction:(trend.slope??0)>0?'increasing':'decreasing'},
       seasonal:si_data&&siEntries.length?{peak:siEntries[0],trough:siEntries[siEntries.length-1],amplitude:+(((siEntries[0][1]-siEntries[siEntries.length-1][1])/2*100).toFixed(1))}:null,
-      correlations:pearsonPairs.slice(0,4).map(p=>({name:p.name,r:+p.r.toFixed(4),p:+p.p.toFixed(5)})),
-      ols:ols?{r2:+ols.r2.toFixed(4),adj_r2:+ols.adjR2.toFixed(4),predictors:pearsonPairs.slice(0,2).map((p,i)=>({name:p.name,coeff:+ols.coeffs[i+1].toFixed(4),p_value:+ols.pvals[i+1].toFixed(5)}))}:null,
+      correlations:pearsonPairs.slice(0,4).map(p=>({name:p.name,r:+((p.r??0).toFixed(4)),p:+((p.p??1).toFixed(5))})),
+      ols:ols?{r2:+ols.r2.toFixed(4),adj_r2:+ols.adjR2.toFixed(4),predictors:pearsonPairs.filter(p=>Math.abs(p.r)>0.1).slice(0,2).map((p,i)=>({name:p.name,coeff:+(ols.coeffs[i+1]??0).toFixed(4),p_value:+(ols.pvals[i+1]??1).toFixed(5)}))}:null,
       anomalies:anom.outliers.map(o=>({date:o.date,value:+o.value.toFixed(0),z:o.z,direction:o.direction})),
-      stats:{mean:+desc.mean.toFixed(2),std:+desc.std.toFixed(2),min:+desc.min.toFixed(2),max:+desc.max.toFixed(2)},
-      yoy:yoy_data.slice(-8).map(y=>({date:y.date,pct:+y.yoy.toFixed(2)})),
+      stats:{mean:+((desc.mean??0).toFixed(2)),std:+((desc.std??0).toFixed(2)),min:+((desc.min??0).toFixed(2)),max:+((desc.max??0).toFixed(2))},
+      yoy:yoy_data.slice(-8).map(y=>({date:y.date,pct:+((y.pct??y.yoy??0).toFixed(2))})),
       goal:ctx.goal||'general',
       grain,
       comp_mode:compMode,
