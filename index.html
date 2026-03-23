@@ -1999,6 +1999,7 @@ Return ONLY valid JSON (no markdown, no preamble):
     </div>`;
 
         let channelsHTML = '';
+        const chMod = narrative.modules?.find(m => m.id === 'channels'); 
 
         if (chMod && channel_breakdown && channel_breakdown.data.length > 0) {
           const maxShare = channel_breakdown.data[0].share_pct;
