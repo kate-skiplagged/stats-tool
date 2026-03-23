@@ -225,9 +225,18 @@ textarea:focus{border-color:var(--accent);}
       <div class="q-label">North-star metric in this dataset <span style="color:var(--dim);font-weight:400">(column name or description)</span></div>
       <textarea id="metric-inp" rows="2" placeholder="e.g. 'service_fee_revenue', 'total_bookings', or 'the revenue column'"></textarea>
     </div>
+    <div class="q-block" style="margin-top:16px">
+      <div class="q-label">Comparison period — how should we measure change?</div>
+      <div class="q-opts">
+        <div class="q-opt" onclick="pick(this,'comp','wow')" data-v="wow">Week-over-week <span style="font-size:10px;opacity:.6;margin-left:4px">same day of week</span></div>
+        <div class="q-opt" onclick="pick(this,'comp','mom')" data-v="mom">Month-over-month <span style="font-size:10px;opacity:.6;margin-left:4px">28-day window</span></div>
+        <div class="q-opt on" onclick="pick(this,'comp','yoy')" data-v="yoy">Year-over-year <span style="font-size:10px;opacity:.6;margin-left:4px">default</span></div>
+        <div class="q-opt" onclick="pick(this,'comp','auto')" data-v="auto">Auto-detect</div>
+      </div>
+    </div>
     <div class="q-block" style="margin-top:14px">
       <div class="q-label">Focus window or segment? <span style="color:var(--dim);font-weight:400">(optional)</span></div>
-      <textarea id="focus-inp" rows="2" placeholder="e.g. 'last 12 months', 'US only', 'Q1 2025 vs Q1 2024'"></textarea>
+      <textarea id="focus-inp" rows="2" placeholder="e.g. 'last 4 weeks', 'US only', 'post-launch vs pre-launch'"></textarea>
     </div>
     <div style="margin-top:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <button class="btn btn-p" id="run-btn" onclick="runAnalysis()" disabled>Run analysis →</button>
@@ -271,6 +280,7 @@ textarea:focus{border-color:var(--accent);}
 </div><!-- /app -->
 
 <script>
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  GROUND TRUTH — Python/scipy output for validation
 // ═══════════════════════════════════════════════════════════════════════════
@@ -447,17 +457,78 @@ const Stats = (() => {
   }
 
   // ── YoY growth ────────────────────────────────────────────────────────────
-  function yoyGrowth(dates, values) {
-    const map={};
-    dates.forEach((d,i)=>map[d]=values[i]);
-    const result=[];
-    dates.forEach((d,i)=>{
-      const yr=parseInt(d.slice(0,4)), mo=d.slice(4);
-      const prev=`${yr-1}${mo}`;
-      if(map[prev]!=null) result.push({date:d,prev_date:prev,value:values[i],prev_value:map[prev],yoy:((values[i]-map[prev])/map[prev]*100)});
+  // ── Detect grain from date strings ──────────────────────────────────────
+  function detectGrain(dates) {
+    const sample = dates.filter(Boolean).slice(0, 20);
+    if (!sample.length) return 'month';
+    // YYYY-MM-DD or YYYYMMDD → day
+    const dayCount = sample.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d) || /^\d{4}-W\d{2}-\d$/.test(d)).length;
+    if (dayCount / sample.length > 0.5) return 'day';
+    // YYYY-W## → week
+    const weekCount = sample.filter(d => /^\d{4}-W\d{2}$/.test(d)).length;
+    if (weekCount / sample.length > 0.5) return 'week';
+    return 'month';
+  }
+
+  // ── Period-over-period growth (wow/mom/yoy, grain-aware) ─────────────────
+  function periodGrowth(dates, values, mode) {
+    // mode: 'wow' | 'mom' | 'yoy'
+    // For day grain: wow=7 days back, mom=28 days back, yoy=364 days back
+    // For week grain: wow=1 week back, mom=4 weeks back, yoy=52 weeks back
+    // For month grain: mom=1 month back, yoy=12 months back
+    const grain = detectGrain(dates);
+    const map = {};
+    dates.forEach((d, i) => { if (d) map[d] = values[i]; });
+
+    function shiftDate(d, grain, steps) {
+      // Returns the comparison date string
+      if (grain === 'day') {
+        const dt = new Date(d + 'T00:00:00Z');
+        dt.setUTCDate(dt.getUTCDate() - steps);
+        return dt.toISOString().slice(0, 10);
+      }
+      if (grain === 'week') {
+        // d = 'YYYY-Www', steps in weeks
+        const [yr, wk] = d.split('-W').map(Number);
+        let totalWk = yr * 52 + wk - steps;
+        const newYr = Math.floor(totalWk / 52);
+        const newWk = totalWk % 52 || 52;
+        return `${newYr}-W${String(newWk).padStart(2,'0')}`;
+      }
+      if (grain === 'month') {
+        // d = 'YYYY-MM', steps in months
+        const [yr, mo] = d.split('-').map(Number);
+        let totalMo = yr * 12 + mo - 1 - steps;
+        const newYr = Math.floor(totalMo / 12);
+        const newMo = totalMo % 12 + 1;
+        return `${newYr}-${String(newMo).padStart(2,'0')}`;
+      }
+      return null;
+    }
+
+    const stepsMap = {
+      wow: { day: 7,  week: 1,  month: null },
+      mom: { day: 28, week: 4,  month: 1    },
+      yoy: { day: 364,week: 52, month: 12   },
+    };
+
+    const steps = stepsMap[mode]?.[grain];
+    if (!steps) return []; // mode not applicable for this grain
+
+    const result = [];
+    dates.forEach((d, i) => {
+      if (!d) return;
+      const prevD = shiftDate(d, grain, steps);
+      if (map[prevD] != null) {
+        const pct = (values[i] - map[prevD]) / map[prevD] * 100;
+        result.push({ date: d, prev_date: prevD, value: values[i], prev_value: map[prevD], pct });
+      }
     });
     return result;
   }
+
+  // Legacy alias kept for compat
+  function yoyGrowth(dates, values) { return periodGrowth(dates, values, 'yoy'); }
 
   // ── Descriptive stats ─────────────────────────────────────────────────────
   function describe(a) {
@@ -465,7 +536,7 @@ const Stats = (() => {
     return {n:a.length,mean:mean(a),std:stddevPop(a),min:s[0],q1:s[Math.floor(s.length*.25)],median:s[Math.floor(s.length*.5)],q3:s[Math.floor(s.length*.75)],max:s[s.length-1]};
   }
 
-  return {mean,stddev,stddevPop,linReg,pearson,olsMultiple,seasonalIndex,anomalies,yoyGrowth,describe,tpval};
+  return {mean,stddev,stddevPop,linReg,pearson,olsMultiple,seasonalIndex,anomalies,yoyGrowth,periodGrowth,detectGrain,describe,tpval};
 })();
 
 // ── Date normalization — handles YYYY-MM, YYYY-MM-DD, YYYYMMDD ───────────────
@@ -474,7 +545,7 @@ function normalizeDate(d) {
   const s = String(d).trim();
   if(!s||s.startsWith('#')) return null;
   // YYYYMMDD → YYYY-MM
-  if (/^\d{8}$/.test(s)) return s.slice(0,4) + '-' + s.slice(4,6);
+  if (/^\d{8}$/.test(s)) return s.slice(0,4) + '-' + s.slice(4,6) + '-' + s.slice(6,8);
   // YYYY-MM-DD or YYYY/MM/DD → YYYY-MM
   if (/^\d{4}[-\/]\d{2}[-\/]\d{2}/.test(s)) return s.slice(0,7).replace('/','-');
   // YYYY-MM already
@@ -578,7 +649,7 @@ function runTests() {
 //  ANALYSIS RUNNER — stats locally, narrative via Claude API
 // ═══════════════════════════════════════════════════════════════════════════
 let parsedData=null, detectedCols=null;
-const ctx={goal:null,metric:'',focus:''};
+const ctx={goal:null,comp:'yoy',metric:'',focus:''};
 
 // File handling
 document.getElementById('drop-zone').addEventListener('dragover',e=>{e.preventDefault();e.currentTarget.classList.add('drag');});
@@ -634,12 +705,15 @@ function showSchema(filename,rows){
 // Context options
 function pick(el,group,val){
   document.querySelectorAll(`.q-opt`).forEach(o=>{ if(o.getAttribute('data-v')&&o.parentElement===el.parentElement) o.classList.remove('on'); });
-  el.classList.add('on'); ctx.goal=val;
+  el.classList.add('on');
+  if(group==='goal') ctx.goal=val;
+  else if(group==='comp') ctx.comp=val;
 }
 
 async function runAnalysis(){
   ctx.metric=document.getElementById('metric-inp').value;
   ctx.focus=document.getElementById('focus-inp').value;
+  if(!ctx.comp) ctx.comp='yoy';
   if(!parsedData||!parsedData.length){alert('Upload a dataset first.');return;}
   show('sec-run');
 
@@ -666,45 +740,57 @@ async function runAnalysis(){
 
     const toNum=v=>typeof v==='number'?v:parseFloat(v);
 
-    // ── 2. Aggregate by month (handles multi-row-per-date channel exports) ───
+    // ── 2. Detect grain + aggregate ──────────────────────────────────────────
     await sleep(500); adv();
 
-    let Y, dates, T;
-    if (dateCol) {
-      // Build month → sum map for metric and all numeric cols
-      const monthMetric={}, monthCols={};
-      numCols.forEach(c=>{ monthCols[c]={}; });
+    let Y, dates, T, grain;
 
+    if (dateCol) {
+      // Pass raw date strings to detectGrain (normalizeDate now preserves full YYYY-MM-DD)
+      const rawSample = parsedData.slice(0,30).map(row=>normalizeDate(String(row[dateCol]||'').trim())).filter(Boolean);
+      grain = Stats.detectGrain(rawSample);
+
+      function bucketKey(rawDate) {
+        const s = String(rawDate||'').trim();
+        if(!s) return null;
+        const n = normalizeDate(s);
+        if(!n) return null;
+        if(grain==='month') return n.slice(0,7);
+        if(grain==='week') {
+          const dt=new Date(n.slice(0,10)+'T00:00:00Z');
+          const jan4=new Date(Date.UTC(dt.getUTCFullYear(),0,4));
+          const wk=Math.ceil(((dt-jan4)/86400000+jan4.getUTCDay()+1)/7);
+          return `${dt.getUTCFullYear()}-W${String(wk).padStart(2,'0')}`;
+        }
+        return n.slice(0,10); // day: YYYY-MM-DD
+      }
+
+      const bucketMetric={}, bucketCols={};
+      numCols.forEach(c=>{ bucketCols[c]={}; });
       parsedData.forEach(row=>{
-        const rawDate = String(row[dateCol]||'').trim();
-        const mo = normalizeDate(rawDate);
-        if(!mo||mo.length<7) return; // skip malformed/metadata rows
-        const v = toNum(row[metricCol]);
+        const bk=bucketKey(row[dateCol]);
+        if(!bk) return;
+        const v=toNum(row[metricCol]);
         if(isNaN(v)) return;
-        monthMetric[mo] = (monthMetric[mo]||0) + v;
-        numCols.forEach(c=>{
-          const cv=toNum(row[c]);
-          if(!isNaN(cv)) monthCols[c][mo]=(monthCols[c][mo]||0)+cv;
-        });
+        bucketMetric[bk]=(bucketMetric[bk]||0)+v;
+        numCols.forEach(c=>{ const cv=toNum(row[c]); if(!isNaN(cv)) bucketCols[c][bk]=(bucketCols[c][bk]||0)+cv; });
       });
 
-      dates = Object.keys(monthMetric).sort();
-      if(dates.length < 3) throw new Error('Not enough distinct time periods after aggregation (need at least 3 months).');
-      Y = dates.map(m=>monthMetric[m]);
-      T = Y.map((_,i)=>i);
-
-      // Store aggregated cols for pearson (aligned to same months)
-      window._aggCols = {};
-      numCols.forEach(c=>{ window._aggCols[c] = dates.map(m=>monthCols[c][m]||0); });
+      dates=Object.keys(bucketMetric).sort();
+      if(dates.length<3) throw new Error(`Not enough distinct ${grain} periods (need 3+). Found: ${dates.length}`);
+      Y=dates.map(d=>bucketMetric[d]);
+      T=Y.map((_,i)=>i);
+      window._aggCols={};
+      numCols.forEach(c=>{ window._aggCols[c]=dates.map(d=>bucketCols[c][d]||0); });
 
     } else {
-      // No date col — use rows as-is
+      grain='unknown';
       const completeIdx=parsedData.map((_,i)=>i).filter(i=>!isNaN(toNum(parsedData[i][metricCol])));
       if(completeIdx.length<3) throw new Error('Not enough valid rows (need at least 3).');
-      Y = completeIdx.map(i=>toNum(parsedData[i][metricCol]));
-      dates = Y.map((_,i)=>`T${i+1}`);
-      T = Y.map((_,i)=>i);
-      window._aggCols = {};
+      Y=completeIdx.map(i=>toNum(parsedData[i][metricCol]));
+      dates=Y.map((_,i)=>`T${i+1}`);
+      T=Y.map((_,i)=>i);
+      window._aggCols={};
       numCols.forEach(c=>{ window._aggCols[c]=completeIdx.map(i=>{const v=toNum(parsedData[i][c]);return isNaN(v)?0:v;}); });
     }
 
@@ -722,9 +808,15 @@ async function runAnalysis(){
 
     const topPredictors=pearsonPairs.slice(0,2).map(p=>p.data).filter(Boolean);
     const ols=topPredictors.length>0?Stats.olsMultiple([...topPredictors,T],Y):null;
-    const si_data=dateCol?Stats.seasonalIndex(dates,Y):null;
+    // Only compute seasonal index for month grain (day/week grain = use period comparison instead)
+    const si_data=(dateCol&&grain==='month')?Stats.seasonalIndex(dates,Y):null;
     const anom=Stats.anomalies(Y,dates);
-    const yoy_data=dateCol?Stats.yoyGrowth(dates,Y):[];
+    // Resolve comparison mode — auto picks based on grain
+    const compMode = ctx.comp==='auto'
+      ? (grain==='day'?'wow':grain==='week'?'wow':'yoy')
+      : (ctx.comp||'yoy');
+    const period_data=dateCol?Stats.periodGrowth(dates,Y,compMode):[];
+    const yoy_data=period_data; // alias for render compat
     const desc=Stats.describe(Y);
 
     await sleep(500); adv(); await sleep(400); adv();
@@ -743,13 +835,15 @@ async function runAnalysis(){
       stats:{mean:+desc.mean.toFixed(2),std:+desc.std.toFixed(2),min:+desc.min.toFixed(2),max:+desc.max.toFixed(2)},
       yoy:yoy_data.slice(-8).map(y=>({date:y.date,pct:+y.yoy.toFixed(2)})),
       goal:ctx.goal||'general',
-      context:`Skiplagged.com — flight search with hidden-city ticketing. Revenue: direct booking service fees + affiliate/referral fees. ${ctx.focus||''}`
+      grain,
+      comp_mode:compMode,
+      context:`Skiplagged.com — flight search with hidden-city ticketing. Revenue: direct booking service fees + affiliate/referral fees. Data grain: ${grain}. Comparison mode: ${compMode}. ${ctx.focus||''}`
     };
 
     adv();
     const narrative=await callClaude(statsPayload);
     await sleep(300);
-    renderResults({stats:statsPayload,narrative,Y,dates,T,trend,si_data,pearsonPairs,ols,anom,yoy_data,metricCol,desc,dateCol});
+    renderResults({stats:statsPayload,narrative,Y,dates,T,trend,si_data,pearsonPairs,ols,anom,yoy_data,metricCol,desc,dateCol,grain,compMode});
 
   } catch(e){
     renderError(e.message||String(e));
@@ -819,7 +913,7 @@ Return ONLY valid JSON (no markdown, no preamble):
 //  RENDER RESULTS
 // ═══════════════════════════════════════════════════════════════════════════
 const chartRegistry=[];
-function renderResults({stats,narrative,Y,dates,T,trend,si_data,pearsonPairs,ols,anom,yoy_data,metricCol,desc,dateCol}){
+function renderResults({stats,narrative,Y,dates,T,trend,si_data,pearsonPairs,ols,anom,yoy_data,metricCol,desc,dateCol,grain,compMode}){
   chartRegistry.forEach(c=>c.destroy()); chartRegistry.length=0;
   try {
   const mods=narrative.modules||[];
@@ -928,11 +1022,11 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,pearsonPairs,ols
     <div class="mod-card">
       <div class="mod-head">
         <div class="mod-ic">%</div>
-        <div><div class="mod-title">Year-over-year trajectory</div><div class="mod-subtitle">${yoy_data.length} comparable periods found</div></div>
+        <div><div class="mod-title">${{wow:'Week-over-week',mom:'Month-over-month',yoy:'Year-over-year'}[compMode]||'Period'} comparison</div><div class="mod-subtitle">${yoy_data.length} comparable periods · ${grain||'auto'} grain found</div></div>
       </div>
       <div class="mod-body">
         ${yoy_data.length?`<div class="stats-row">
-          <div class="stat-c"><div class="stat-lbl">Mean YoY</div><div class="stat-val ${Stats.mean(yoy_data.map(y=>y.yoy))>0?'pos':'neg'}">${Stats.mean(yoy_data.map(y=>y.yoy))>0?'+':''}${Stats.mean(yoy_data.map(y=>y.yoy)).toFixed(1)}%</div></div>
+          <div class="stat-c"><div class="stat-lbl">Mean ${{wow:'WoW',mom:'MoM',yoy:'YoY'}[compMode]||'PoP'}</div><div class="stat-val ${Stats.mean(yoy_data.map(y=>y.yoy))>0?'pos':'neg'}">${Stats.mean(yoy_data.map(y=>y.yoy))>0?'+':''}${Stats.mean(yoy_data.map(y=>y.yoy)).toFixed(1)}%</div></div>
           <div class="stat-c"><div class="stat-lbl">Best period</div><div class="stat-val pos">${([...yoy_data].sort((a,b)=>b.yoy-a.yoy)[0]?.date||'—')} (+${([...yoy_data].sort((a,b)=>b.yoy-a.yoy)[0]?.yoy??0).toFixed(1)}%)</div></div>
           <div class="stat-c"><div class="stat-lbl">Worst period</div><div class="stat-val neg">${([...yoy_data].sort((a,b)=>a.yoy-b.yoy)[0]?.date||'—')} (${([...yoy_data].sort((a,b)=>a.yoy-b.yoy)[0]?.yoy??0).toFixed(1)}%)</div></div>
         </div>`:``}
@@ -1010,6 +1104,9 @@ function resetAll(){
   document.getElementById('metric-inp').value='';
   document.getElementById('focus-inp').value='';
   document.querySelectorAll('.q-opt').forEach(o=>o.classList.remove('on'));
+  ctx.comp='yoy';
+  // Re-select YoY as default
+  document.querySelector('.q-opt[data-v="yoy"]')?.classList.add('on');
   chartRegistry.forEach(c=>c.destroy());chartRegistry.length=0;
   window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -1071,6 +1168,7 @@ function changeKey() {
 
 // Run on load
 initKeyBanner();
+
 
 </script>
 </body>
