@@ -7,6 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%232A52D8%22/><text x=%2250%22 y=%2270%22 font-family=%22system-ui, sans-serif%22 font-size=%2255%22 font-weight=%22bold%22 fill=%22white%22 text-anchor=%22middle%22>k8</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;600;700;800&display=swap');
 :root{--bg:#0C0D0E;--surface:#171A1A;--surface2:#212727;--surface3:#2D3434;--border:rgba(255,255,255,0.07);--bb:rgba(255,255,255,0.13);--accent:#2A52D8;--teal:#40C18D;--red:#F8414C;--amber:#FFB800;--text:#F6F7F9;--muted:#A5AAB3;--dim:#7B8B8E;--mono:'DM Mono',monospace;--sans:'Syne',sans-serif;}
@@ -898,7 +899,6 @@ async function runAnalysis(){
 
 async function callClaude(statsPayload){
   
-  // Dynamic Context Builder
   let dataDictionaryContext = "";
   let relevantKeys = [statsPayload.metric];
   if (statsPayload.correlations) {
@@ -979,7 +979,6 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearson
   const months_en=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const days_en=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   
-  // Smart Formatting (Checks Dictionary first, then Regex)
   let isMoney = false;
   let isPct = false;
   
@@ -1088,6 +1087,10 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearson
       </div>
     </div>`;
 
+  const recentAnomalies = anom?.outliers && anom.outliers.length > 0 
+      ? [...anom.outliers].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0, 5) 
+      : [];
+
   const anomHTML=`
     <div class="mod-card">
       <div class="mod-head">
@@ -1101,12 +1104,14 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearson
           <div class="stat-c"><div class="stat-lbl">Outliers found</div><div class="stat-val ${anom?.outliers?.length?'warn':'pos'}">${anom?.outliers?.length||0}</div></div>
         </div>
         <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('anomalies','plain_english'))}</div></div>
-        ${anom?.outliers?.length?`<div style="margin-bottom:16px">${anom.outliers.map(o=>`<div class="driver-row">
+        ${recentAnomalies.length?`<div style="margin-bottom:16px">${recentAnomalies.map(o=>`<div class="driver-row">
           <span class="d-lbl">${esc(o.date)}</span>
           <div class="bar-w"><div class="bar-f" style="width:${Math.min(100,Math.abs(o.z)/3*100)}%;background:${o.direction==='high'?'var(--amber)':'var(--red)'}"></div></div>
           <span class="d-val" style="color:${o.direction==='high'?'var(--amber)':'var(--red)'}">${fmt(o.value)}</span>
           <span class="d-sig">z=${o.z>0?'+':''}${o.z.toFixed(2)}</span>
-        </div>`).join('')}</div>`:'<div style="font-family:var(--mono);font-size:12px;color:var(--teal);margin-bottom:16px;padding:12px;background:rgba(64,193,141,.06);border-radius:8px">No outliers detected — distribution is consistent.</div>'}
+        </div>`).join('')}
+        ${anom.outliers.length > 5 ? `<div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-align:center;padding-top:10px">Showing 5 most recent outliers</div>` : ''}
+        </div>`:'<div style="font-family:var(--mono);font-size:12px;color:var(--teal);margin-bottom:16px;padding:12px;background:rgba(64,193,141,.06);border-radius:8px">No outliers detected — distribution is consistent.</div>'}
         <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('anomalies','what_now'))}</div></div>
         <div class="tech-row"><span class="tech-tag">IQR × 1.5 method</span><span class="tech-tag">z-score threshold: |z| > 2.0</span></div>
       </div>
@@ -1309,6 +1314,10 @@ function generateShareLink() {
   try {
     const st = lastRunPayload;
     
+    const recentAnomalies = st.anom?.outliers && st.anom.outliers.length > 0 
+      ? [...st.anom.outliers].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0, 5) 
+      : [];
+    
     let chBreakdownMini = null;
     if(st.channel_breakdown) {
        chBreakdownMini = {
@@ -1340,14 +1349,14 @@ function generateShareLink() {
       pearsonPairs: st.pearsonPairs?.map(p => ({name: p.name, r: p.r, p: p.p})) || [],
       ols: st.ols ? {r2: st.ols.r2, adjR2: st.ols.adjR2} : null,
       olsNames: st.olsNames,
-      anom: { lo: st.anom.lo, hi: st.anom.hi, outliers: st.anom.outliers?.slice(0,10) },
+      anom: { lo: st.anom.lo, hi: st.anom.hi, outliers: recentAnomalies },
       yoy_data: st.yoy_data.slice(-10), 
       channel_breakdown: chBreakdownMini,
       grain: st.grain,
       compMode: st.compMode
     };
 
-    const encoded = btoa(encodeURIComponent(JSON.stringify(mini)));
+    const encoded = LZString.compressToEncodedURIComponent(JSON.stringify(mini));
     const url = window.location.origin + window.location.pathname + '#s=' + encoded;
     
     navigator.clipboard.writeText(url).then(() => {
@@ -1432,7 +1441,7 @@ window.addEventListener('DOMContentLoaded', () => {
   initKeyBanner();
   if (window.location.hash.startsWith('#s=')) {
     try {
-      const decodedStr = decodeURIComponent(atob(window.location.hash.substring(3)));
+      const decodedStr = LZString.decompressFromEncodedURIComponent(window.location.hash.substring(3));
       const sharedPayload = JSON.parse(decodedStr);
       renderResults(sharedPayload);
     } catch(e) {
