@@ -250,10 +250,22 @@ textarea:focus{border-color:var(--accent);}
         <div class="q-opt" onclick="pick(this,'goal','feature')" data-v="feature">Did this feature move the needle?</div>
       </div>
     </div>
+    
     <div class="q-block" style="margin-top:16px" id="metric-sel-block">
       <div class="q-label">Primary outcome metric <span style="color:var(--dim);font-weight:400">(if multiple metrics selected above, pick the main one)</span></div>
       <div id="metric-select-opts" class="q-opts"></div>
     </div>
+
+    <div class="q-block" style="margin-top:16px">
+      <div class="q-label">Aggregate By (Time Grain)</div>
+      <div class="q-opts">
+        <div class="q-opt on" onclick="pick(this,'grain','auto')" data-v="auto">Auto</div>
+        <div class="q-opt" onclick="pick(this,'grain','day')" data-v="day">Daily</div>
+        <div class="q-opt" onclick="pick(this,'grain','week')" data-v="week">Weekly</div>
+        <div class="q-opt" onclick="pick(this,'grain','month')" data-v="month">Monthly</div>
+      </div>
+    </div>
+
     <div class="q-block" style="margin-top:16px">
       <div class="q-label">Comparison period — how should we measure change?</div>
       <div class="q-opts">
@@ -263,6 +275,7 @@ textarea:focus{border-color:var(--accent);}
         <div class="q-opt" onclick="pick(this,'comp','auto')" data-v="auto">Auto-detect</div>
       </div>
     </div>
+
     <div class="q-block" style="margin-top:14px">
       <div class="q-label">Focus window or segment? <span style="color:var(--dim);font-weight:400">(optional)</span></div>
       <textarea id="focus-inp" rows="2" placeholder="e.g. 'last 4 weeks', 'US only', 'post-launch vs pre-launch'"></textarea>
@@ -347,17 +360,26 @@ const GA_ANNOTATIONS = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  GROUND TRUTH DEMO DATA
+//  DATE NORMALIZATION (Supports precise day parsing for grain adjustments)
 // ═══════════════════════════════════════════════════════════════════════════
-const GT = {
-  raw: {
-    dates: ["2023-01","2023-02","2023-03","2023-04","2023-05","2023-06","2023-07","2023-08","2023-09","2023-10","2023-11","2023-12","2024-01","2024-02","2024-03","2024-04","2024-05","2024-06","2024-07"],
-    revenue: [983199.11,1042608.54,1252437.49,1263143.61,1357003.54,1276735.35,1305253.15,1288064.84,1204049.94,1228728.93,1158186.18,1084027.99,1122514.63,1065033.64,1263761.6,1231213.69,1222374.27,1256971.0,1181850.87],
-    bookings: [58707,60163,71728,71271,73968,70380,67725,70428,67466,68071,64412,58495,60316,58825,69071,69242,69427,67601,64022],
-    sessions: [3126610,3132901,3735786,3343418,3443483,3438516,3412290,3138559,2719844,2648019,2710968,2593457,2857867,2668053,2837515,2721224,2780552,2730050,2505563],
-    hc_bookings: [16028,15656,17819,18718,19041,16416,19032,20867,20878,21005,20640,20305,22110,19268,22454,22756,21221,23147,22087]
+function normalizeDate(d) {
+  if(d===null||d===undefined||d==='') return null;
+  const s = String(d).trim();
+  if(!s||s.startsWith('#')) return null;
+  if (/^\d{8}$/.test(s)) return s.slice(0,4) + '-' + s.slice(4,6) + '-' + s.slice(6,8);
+  if (/^\d{4}[-\/]\d{2}[-\/]\d{2}/.test(s)) return s.replace(/\//g,'-').slice(0,10); // preserves day
+  if (/^\d{4}-\d{2}$/.test(s)) return s + '-01'; // Default to 1st if month only
+  if (/^\d{6}$/.test(s)) return s.slice(0,4) + '-' + s.slice(4,6) + '-01';
+  // Check for common M/D/YYYY or MM/DD/YYYY
+  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if(m) {
+      let yr = m[3];
+      if(yr.length === 2) yr = (parseInt(yr)<50 ? '20' : '19') + yr;
+      return `${yr}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
   }
-};
+  return null; 
+}
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  STATISTICS ENGINE
@@ -458,6 +480,7 @@ const Stats = (() => {
     const pvals = tstats.map(t=>tpval(t, n-k));
     return {coeffs,r2,adjR2,seCoeffs,tstats,pvals,ssres,mse};
   }
+  
   function invertMatrix(m) {
     const n=m.length;
     const I=m.map((_,i)=>m[0].map((_,j)=>i===j?1:0));
@@ -508,15 +531,21 @@ const Stats = (() => {
   function detectGrain(dates) {
     const sample = dates.filter(Boolean).slice(0, 20);
     if (!sample.length) return 'month';
-    const dayCount = sample.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d) || /^\d{4}-W\d{2}-\d$/.test(d)).length;
-    if (dayCount / sample.length > 0.5) return 'day';
-    const weekCount = sample.filter(d => /^\d{4}-W\d{2}$/.test(d)).length;
-    if (weekCount / sample.length > 0.5) return 'week';
-    return 'month';
+    
+    // Check if everything maps to the 1st of the month or only has YYYY-MM
+    let isMonth = true;
+    for(let d of sample) {
+        if (/^\d{4}-W\d{2}$/.test(d)) return 'week';
+        const norm = normalizeDate(d);
+        if (norm && !norm.endsWith('-01')) {
+            isMonth = false;
+        }
+    }
+    if (isMonth) return 'month';
+    return 'day'; // Default to day if there are non-01 dates
   }
 
-  function periodGrowth(dates, values, mode) {
-    const grain = detectGrain(dates);
+  function periodGrowth(dates, values, mode, grain) {
     const map = {};
     dates.forEach((d, i) => { if (d) map[d] = values[i]; });
 
@@ -567,22 +596,12 @@ const Stats = (() => {
   return {mean,stddev,stddevPop,linReg,pearson,olsMultiple,seasonalIndex,anomalies,periodGrowth,detectGrain,describe,tpval};
 })();
 
-function normalizeDate(d) {
-  if(d===null||d===undefined||d==='') return null;
-  const s = String(d).trim();
-  if(!s||s.startsWith('#')) return null;
-  if (/^\d{8}$/.test(s)) return s.slice(0,4) + '-' + s.slice(4,6) + '-' + s.slice(6,8);
-  if (/^\d{4}[-\/]\d{2}[-\/]\d{2}/.test(s)) return s.slice(0,7).replace('/','-');
-  if (/^\d{4}-\d{2}$/.test(s)) return s;
-  if (/^\d{6}$/.test(s)) return s.slice(0,4) + '-' + s.slice(4,6);
-  return null; 
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  ANALYSIS RUNNER
 // ═══════════════════════════════════════════════════════════════════════════
 let parsedData=null, detectedCols=null;
-const ctx={goal:null,comp:'yoy',metric:'',focus:'',use_ga:true};
+const ctx={goal:null,comp:'yoy',metric:'',focus:'',use_ga:true, grain:'auto'};
 let lastRunPayload = null; 
 
 document.getElementById('drop-zone').addEventListener('dragover',e=>{e.preventDefault();e.currentTarget.classList.add('drag');});
@@ -668,6 +687,7 @@ function pick(el,group,val){
   el.classList.add('on');
   if(group==='goal') ctx.goal=val;
   else if(group==='comp') ctx.comp=val;
+  else if(group==='grain') ctx.grain=val;
 }
 
 async function runAnalysis(){
@@ -704,8 +724,12 @@ async function runAnalysis(){
     let Y, dates, T, grain;
 
     if (dateCol) {
-      const rawSample = parsedData.slice(0,30).map(row=>normalizeDate(String(row[dateCol]||'').trim())).filter(Boolean);
-      grain = Stats.detectGrain(rawSample);
+      // 1. Detect natural grain
+      const rawSample = parsedData.slice(0,30).map(row=>String(row[dateCol]||'').trim()).filter(Boolean);
+      const detectedRawGrain = Stats.detectGrain(rawSample);
+      
+      // 2. Set target grain based on UI toggle
+      grain = ctx.grain === 'auto' ? detectedRawGrain : ctx.grain;
 
       function bucketKey(rawDate) {
         const s = String(rawDate||'').trim();
@@ -771,7 +795,18 @@ async function runAnalysis(){
             grandTotal += v;
             
             if (dateCol) {
-               const bk = bucketKey(row[dateCol]);
+               // Must redefine bucketKey internally if we want it to work outside its previous scope
+               const bk = grain === 'month' ? normalizeDate(String(row[dateCol]||'')).slice(0,7) 
+                          : grain === 'week' ? (() => {
+                                const n = normalizeDate(String(row[dateCol]||''));
+                                if(!n) return null;
+                                const dt=new Date(n.slice(0,10)+'T00:00:00Z');
+                                const jan4=new Date(Date.UTC(dt.getUTCFullYear(),0,4));
+                                const wk=Math.ceil(((dt-jan4)/86400000+jan4.getUTCDay()+1)/7);
+                                return `${dt.getUTCFullYear()}-W${String(wk).padStart(2,'0')}`;
+                             })()
+                          : normalizeDate(String(row[dateCol]||'')).slice(0,10);
+
                if (bk) {
                  if (!chTime[bk]) chTime[bk] = {};
                  chTime[bk][k] = (chTime[bk][k] || 0) + v;
@@ -846,6 +881,7 @@ async function runAnalysis(){
     let olsMatrix = [...strongPredictors.map(p=>p.data), T];
     let olsNames = [...strongPredictors.map(p=>p.name), 'trend'];
 
+    // Inject Day of Week Dummies for Daily Grain
     if (grain === 'day' && Y.length > 14) {
       const dowDummies = [1, 2, 3, 4, 5, 6].map(d => ({
         name: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][d],
@@ -865,7 +901,7 @@ async function runAnalysis(){
       const buckets = [0,0,0,0,0,0,0];
       const counts = [0,0,0,0,0,0,0];
       dates.forEach((d, i) => {
-        const day = (new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7; 
+        const day = (new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7; // Mon=0
         buckets[day] += Y[i];
         counts[day]++;
       });
@@ -875,7 +911,7 @@ async function runAnalysis(){
 
     const anom=Stats.anomalies(Y,dates);
     const compMode = ctx.comp==='auto' ? (grain==='day'?'wow':grain==='week'?'wow':'yoy') : (ctx.comp||'yoy');
-    const period_data=dateCol?Stats.periodGrowth(dates,Y,compMode):[];
+    const period_data=dateCol?Stats.periodGrowth(dates,Y,compMode,grain):[];
     const yoy_data=period_data; 
     const desc=Stats.describe(Y);
 
@@ -1043,7 +1079,7 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearson
       </div>
       <div class="mod-body">
         <div class="stats-row">
-          <div class="stat-c"><div class="stat-lbl">${grain==='month'?'Monthly':'Daily'} change</div><div class="stat-val ${trend.slope>0?'pos':'neg'}">${trend.slope>0?'+':''}${fmt(trend.slope)}/${grain==='month'?'mo':'day'}</div></div>
+          <div class="stat-c"><div class="stat-lbl">${grain==='month'?'Monthly':grain==='week'?'Weekly':'Daily'} change</div><div class="stat-val ${trend.slope>0?'pos':'neg'}">${trend.slope>0?'+':''}${fmt(trend.slope)}/${grain==='month'?'mo':grain==='week'?'wk':'day'}</div></div>
           <div class="stat-c"><div class="stat-lbl">R² (fit)</div><div class="stat-val neu">${(trend.r2*100).toFixed(1)}%</div></div>
           <div class="stat-c"><div class="stat-lbl">Overall mean</div><div class="stat-val neu">${fmt(desc.mean)}</div></div>
           <div class="stat-c"><div class="stat-lbl">Std deviation</div><div class="stat-val neu">${fmt(desc.std)}</div></div>
@@ -1051,7 +1087,7 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearson
         <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('trend','plain_english'))}</div></div>
         <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
         <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('trend','what_now'))}</div></div>
-        <div class="tech-row"><span class="tech-tag">OLS linear regression</span><span class="sig-pill ${sigClass(trend.pval)}">${pFmt(trend.pval)}</span><span class="tech-tag">n=${Y.length}</span></div>
+        <div class="tech-row"><span class="tech-tag">OLS linear regression</span><span class="sig-pill ${sigClass(trend.pval)}">${pFmt(trend.pval)}</span><span class="tech-tag">n=${Y.length} periods</span></div>
       </div>
     </div>`;
 
@@ -1078,7 +1114,7 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearson
     <div class="mod-card">
       <div class="mod-head">
         <div class="mod-ic">~</div>
-        <div><div class="mod-title">Seasonality</div><div class="mod-subtitle">${seasonSubtitle || 'Requires a date column'}</div></div>
+        <div><div class="mod-title">Seasonality</div><div class="mod-subtitle">${seasonSubtitle || `Insufficient data at ${grain} grain`}</div></div>
       </div>
       <div class="mod-body">
         ${seasonStats.length?`<div class="stats-row">${seasonStats.map(s=>`<div class="stat-c"><div class="stat-lbl">${s.label}</div><div class="stat-val ${s.val>1?'pos':s.val<0.95?'neg':'neu'}">${(s.val*100).toFixed(1)}%</div></div>`).join('')}</div>`:''}
@@ -1155,7 +1191,7 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearson
     <div class="mod-card">
       <div class="mod-head">
         <div class="mod-ic">%</div>
-        <div><div class="mod-title">${{wow:'Week-over-week',mom:'Month-over-month',yoy:'Year-over-year'}[compMode]||'Period'} comparison</div><div class="mod-subtitle">${yoy_data?.length||0} comparable periods · ${grain||'auto'} grain found</div></div>
+        <div><div class="mod-title">${{wow:'Week-over-week',mom:'Month-over-month',yoy:'Year-over-year'}[compMode]||'Period'} comparison</div><div class="mod-subtitle">${yoy_data?.length||0} comparable periods · ${grain} grain</div></div>
       </div>
       <div class="mod-body">
         ${yoy_data?.length?`<div class="stats-row">
@@ -1329,7 +1365,6 @@ function populateMetricSelector(){
 }
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
-function toggleTestMode(){const t=document.getElementById('sec-test');if(t.classList.contains('hidden')){show('sec-test');runTests();}else{t.classList.add('hidden');}}
 
 function showToast(msg) {
   const toast = document.getElementById('toast');
@@ -1408,7 +1443,9 @@ function resetAll(){
   document.getElementById('use-ga-ann').checked = true;
   document.querySelectorAll('.q-opt').forEach(o=>o.classList.remove('on'));
   ctx.comp='yoy';
+  ctx.grain='auto';
   document.querySelector('.q-opt[data-v="yoy"]')?.classList.add('on');
+  document.querySelector('.q-opt[data-v="auto"]')?.classList.add('on');
   chartRegistry.forEach(c=>c.destroy());chartRegistry.length=0;
   window.scrollTo({top:0,behavior:'smooth'});
   window.location.hash = ''; 
