@@ -44,6 +44,23 @@ textarea:focus{border-color:var(--accent);}
 .sc-type{font-size:10px;color:var(--dim);}
 .sc-sample{font-size:10px;color:var(--muted);margin-top:2px;font-family:var(--mono);}
 .file-chip{display:inline-flex;align-items:center;gap:7px;background:rgba(0,212,168,.1);border:1px solid rgba(0,212,168,.2);border-radius:6px;padding:6px 12px;font-family:var(--mono);font-size:12px;color:var(--teal);margin-top:12px;}
+.col-chip{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;cursor:pointer;transition:all .15s;user-select:none;position:relative;}
+.col-chip:hover{border-color:var(--bb);}
+.col-chip.is-metric{border-color:var(--accent);background:rgba(108,99,255,.12);}
+.col-chip.is-date{border-color:rgba(0,212,168,.5);background:rgba(0,212,168,.08);}
+.col-chip.is-ignore{opacity:.4;}
+.col-chip.is-ignore .sc-col{color:var(--dim);}
+.col-role{font-size:9px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px;font-family:var(--mono);}
+.col-role.role-metric{color:var(--accent);}
+.col-role.role-date{color:var(--teal);}
+.col-role.role-dim{color:var(--dim);}
+.col-role.role-ignore{color:var(--dim);}
+.col-actions{display:flex;gap:4px;margin-top:7px;flex-wrap:wrap;}
+.col-act{font-size:9px;padding:2px 7px;border-radius:4px;border:1px solid var(--border);color:var(--dim);cursor:pointer;font-family:var(--mono);background:transparent;transition:all .12s;}
+.col-act:hover{border-color:var(--bb);color:var(--text);}
+.col-act.active-metric{background:rgba(108,99,255,.2);border-color:var(--accent);color:var(--accent);}
+.col-act.active-date{background:rgba(0,212,168,.15);border-color:rgba(0,212,168,.5);color:var(--teal);}
+.col-act.active-ignore{background:rgba(122,120,150,.15);border-color:var(--dim);color:var(--dim);}
 
 /* ── Context ── */
 .q-block{margin-bottom:18px;}
@@ -221,9 +238,9 @@ textarea:focus{border-color:var(--accent);}
         <div class="q-opt" onclick="pick(this,'goal','feature')" data-v="feature">Did this feature move the needle?</div>
       </div>
     </div>
-    <div class="q-block" style="margin-top:16px">
-      <div class="q-label">North-star metric in this dataset <span style="color:var(--dim);font-weight:400">(column name or description)</span></div>
-      <textarea id="metric-inp" rows="2" placeholder="e.g. 'service_fee_revenue', 'total_bookings', or 'the revenue column'"></textarea>
+    <div class="q-block" style="margin-top:16px" id="metric-sel-block">
+      <div class="q-label">Primary outcome metric <span style="color:var(--dim);font-weight:400">(if multiple metrics selected above, pick the main one)</span></div>
+      <div id="metric-select-opts" class="q-opts"></div>
     </div>
     <div class="q-block" style="margin-top:16px">
       <div class="q-label">Comparison period — how should we measure change?</div>
@@ -696,19 +713,54 @@ function inferCols(data,fields){
     const vals=data.map(r=>r[f]).filter(v=>v!=null&&v!=='');
     const nums=vals.filter(v=>typeof v==='number');
     const dts=vals.filter(v=>typeof v==='string'&&/^\d{4}/.test(v));
+    // Detect YYYYMMDD integers (e.g. 20250101) — numeric but actually a date
+    const yyyymmdd=nums.filter(v=>v>=19000101&&v<=20991231&&Number.isInteger(v)&&String(v).length===8);
     let type='text';
-    if(nums.length/vals.length>.7) type='numeric';
+    if(yyyymmdd.length/vals.length>.7) type='date';
+    else if(nums.length/vals.length>.7) type='numeric';
     else if(dts.length/vals.length>.5) type='date';
-    return {name:f,type,sample:vals[0]};
+    // Guess role: date col, id col, or metric
+    let role='metric';
+    if(type==='date') role='date';
+    else if(/^(id|key|code|name|label|group|channel|category|segment|type|source|medium|campaign|device|region|country)/i.test(f)) role='dim';
+    else if(type==='text') role='dim';
+    return {name:f,type,sample:vals[0],role};
   });
 }
 
 function showSchema(filename,rows){
   const sw=document.getElementById('schema-wrap');
   document.getElementById('file-chip-el').innerHTML=`<div class="file-chip">✓ ${esc(filename)}</div>`;
-  document.getElementById('row-count').textContent=`${rows.toLocaleString()} rows · ${detectedCols.length} columns`;
-  document.getElementById('schema-cols').innerHTML=detectedCols.map(c=>`<div class="schema-item"><div class="sc-col">${esc(c.name)}</div><div class="sc-type">${c.type}</div><div class="sc-sample">${String(c.sample??'—').substring(0,20)}</div></div>`).join('');
+  document.getElementById('row-count').textContent=`${rows.toLocaleString()} rows · ${detectedCols.length} columns detected — click to set each column's role`;
+  renderColPicker();
   sw.classList.remove('hidden');
+}
+
+function renderColPicker(){
+  const roleLabel={metric:'Outcome metric',date:'Date / time',dim:'Dimension',ignore:'Ignore'};
+  const roleClass={metric:'role-metric',date:'role-date',dim:'role-dim',ignore:'role-ignore'};
+  document.getElementById('schema-cols').innerHTML=detectedCols.map((c,ci)=>`
+    <div class="col-chip ${c.role==='metric'?'is-metric':c.role==='date'?'is-date':c.role==='ignore'?'is-ignore':''}" id="chip-${ci}">
+      <div class="col-role ${roleClass[c.role]||'role-dim'}">${roleLabel[c.role]||'Dimension'}</div>
+      <div class="sc-col">${esc(c.name)}</div>
+      <div class="sc-sample">${esc(String(c.sample??'—').substring(0,18))}</div>
+      <div class="col-actions">
+        <button class="col-act ${c.role==='metric'?'active-metric':''}" onclick="setRole(${ci},'metric')">metric</button>
+        <button class="col-act ${c.role==='date'?'active-date':''}" onclick="setRole(${ci},'date')">date</button>
+        <button class="col-act ${c.role==='dim'?'':''}" onclick="setRole(${ci},'dim')">dimension</button>
+        <button class="col-act ${c.role==='ignore'?'active-ignore':''}" onclick="setRole(${ci},'ignore')">ignore</button>
+      </div>
+    </div>`).join('');
+}
+
+function setRole(ci,role){
+  // Only one date col allowed
+  if(role==='date') detectedCols.forEach((c,i)=>{ if(i!==ci&&c.role==='date') c.role='dim'; });
+  detectedCols[ci].role=role;
+  renderColPicker();
+  // Enable run button only if at least one metric selected
+  const hasMetric=detectedCols.some(c=>c.role==='metric');
+  document.getElementById('run-btn').disabled=!hasMetric;
 }
 
 // Context options
@@ -740,12 +792,15 @@ async function runAnalysis(){
 
   try {
     // ── 1. Detect columns ────────────────────────────────────────────────────
-    const numCols=detectedCols.filter(c=>c.type==='numeric').map(c=>c.name);
-    // Also catch columns literally named 'date' that parser typed as text
-    const dateCols=detectedCols.filter(c=>c.type==='date'||c.name.toLowerCase()==='date').map(c=>c.name);
+    // Use user-assigned roles from the column picker
+    const metricCols=detectedCols.filter(c=>c.role==='metric').map(c=>c.name);
+    const dateCols=detectedCols.filter(c=>c.role==='date'||c.type==='date'||c.name.toLowerCase()==='date').map(c=>c.name);
     const dateCol=dateCols[0]||null;
-    const metricCol=guessMetric(numCols,ctx.metric)||numCols[0];
-    if(!metricCol) throw new Error('No numeric columns detected. Check your CSV format.');
+    // Primary metric: user's explicit pick, or first metric col
+    const metricCol=(metricCols.includes(ctx.metric)?ctx.metric:null)||metricCols[0]||null;
+    if(!metricCol) throw new Error('No metric column selected. Use the column picker to mark at least one column as a metric.');
+    // Predictor cols: all other metric-role cols (not the primary, not date, not dim, not ignore)
+    const numCols=metricCols.filter(c=>c!==metricCol);
 
     const toNum=v=>typeof v==='number'?v:parseFloat(v);
 
@@ -1102,7 +1157,30 @@ function renderError(msg){
 // ═══════════════════════════════════════════════════════════════════════════
 //  UI UTILITIES
 // ═══════════════════════════════════════════════════════════════════════════
-function show(id){const el=document.getElementById(id);el.classList.remove('hidden');setTimeout(()=>{el.scrollIntoView({behavior:'smooth',block:'start'});},80);}
+function show(id){
+  const el=document.getElementById(id);
+  el.classList.remove('hidden');
+  if(id==='sec-ctx') populateMetricSelector();
+  setTimeout(()=>{el.scrollIntoView({behavior:'smooth',block:'start'});},80);
+}
+
+function populateMetricSelector(){
+  const metrics=detectedCols.filter(c=>c.role==='metric');
+  const opts=document.getElementById('metric-select-opts');
+  if(!opts) return;
+  const block=document.getElementById('metric-sel-block');
+  if(metrics.length<=1){
+    if(block) block.style.display='none'; // only one metric, no need to pick
+    return;
+  }
+  if(block) block.style.display='';
+  opts.innerHTML=metrics.map(c=>`<div class="q-opt ${ctx.metric===c.name?'on':''}" onclick="ctx.metric='${c.name.replace(/'/g,"\\'")}';document.querySelectorAll('#metric-select-opts .q-opt').forEach(o=>o.classList.remove('on'));this.classList.add('on')">${esc(c.name)}</div>`).join('');
+  // Auto-select first
+  if(!ctx.metric||!metrics.find(c=>c.name===ctx.metric)){
+    ctx.metric=metrics[0]?.name||'';
+    opts.querySelector('.q-opt')?.classList.add('on');
+  }
+}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 function toggleTestMode(){const t=document.getElementById('sec-test');if(t.classList.contains('hidden')){show('sec-test');runTests();}else{t.classList.add('hidden');}}
@@ -1110,6 +1188,8 @@ function resetAll(){
   parsedData=null;detectedCols=null;ctx.goal=null;
   ['sec-ctx','sec-run','sec-results','sec-test'].forEach(id=>document.getElementById(id).classList.add('hidden'));
   document.getElementById('schema-wrap').classList.add('hidden');
+  document.getElementById('schema-cols').innerHTML='';
+  ctx.metric='';
   document.getElementById('results-container').innerHTML='';
   document.getElementById('paste-area').value='';
   document.getElementById('metric-inp').value='';
