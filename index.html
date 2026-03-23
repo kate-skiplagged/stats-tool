@@ -19,7 +19,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 /* ── Header ── */
 .logo-row{display:flex;align-items:center;gap:12px;margin-bottom:40px;}
 .logo-mark{width:36px;height:36px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:white;flex-shrink:0;}
-.logo-text{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.1em;}
+.logo-text{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;}
 h1{font-size:clamp(28px,5vw,46px);font-weight:800;line-height:1.05;letter-spacing:-.03em;margin-bottom:12px;}
 h1 em{font-style:normal;color:var(--accent);}
 .hero-sub{font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;max-width:540px;}
@@ -181,7 +181,7 @@ textarea:focus{border-color:var(--accent);}
 <div class="app">
 
 <div class="logo-row">
-  <div class="logo-mark">S</div>
+  <div class="logo-mark">k8</div>
   <div class="logo-text">k8's gr8 analysis tool · updated 3/23/26</div>
 </div>
 
@@ -267,6 +267,14 @@ textarea:focus{border-color:var(--accent);}
       <div class="q-label">Focus window or segment? <span style="color:var(--dim);font-weight:400">(optional)</span></div>
       <textarea id="focus-inp" rows="2" placeholder="e.g. 'last 4 weeks', 'US only', 'post-launch vs pre-launch'"></textarea>
     </div>
+    
+    <div class="q-block" style="margin-top:14px; background:var(--surface2); padding:12px 14px; border-radius:8px; border:1px solid var(--bb);">
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text);">
+        <input type="checkbox" id="use-ga-ann" checked style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;">
+        Include GA Annotations (Product launches, tests, outages)
+      </label>
+    </div>
+
     <div style="margin-top:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <button class="btn btn-p" id="run-btn" onclick="runAnalysis()" disabled>Run analysis →</button>
     </div>
@@ -296,8 +304,6 @@ textarea:focus{border-color:var(--accent);}
 // ═══════════════════════════════════════════════════════════════════════════
 //  DATA DICTIONARY (Context Engine)
 // ═══════════════════════════════════════════════════════════════════════════
-// Add new columns here to automatically tell the UI how to format them
-// and to tell Claude what they mean so it writes accurate analysis.
 const DATA_DICTIONARY = {
   "purchase_profit": { 
     format: "number", 
@@ -324,6 +330,21 @@ const DATA_DICTIONARY = {
     definition: "Daily Active Users."
   }
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  GA ANNOTATIONS
+// ═══════════════════════════════════════════════════════════════════════════
+const GA_ANNOTATIONS = [
+  {title: 'organic social active', description: 'paid ', dateRange: 'Nov 30, 2022 - Mar 30, 2023'},
+  {title: 'pmax incrementality test', description: 'pmax brand turned off completely', dateRange: 'May 1 - May 31, 2024'},
+  {title: 'incorrect price hacker data', description: 'event was incorrectly configured; updated 6/6', dateRange: 'Jun 5, 2025'},
+  {title: 'Price Hacker live', description: '', dateRange: 'Jun 5, 2025'},
+  {title: 'paid marketing paused', description: '', dateRange: 'Aug 13, 2025'},
+  {title: '3.12.1', description: '', dateRange: 'Aug 7, 2025'},
+  {title: '3.12.2', description: '', dateRange: 'Sep 15, 2025'},
+  {title: 'skiplagged benefits launched', description: 'service fee relabeled benefits on web', dateRange: 'Oct 27, 2025'},
+  {title: 'Book with Miles beta launched', description: '', dateRange: 'Sep 18, 2025'}
+];
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  GROUND TRUTH DEMO DATA
@@ -561,7 +582,7 @@ function normalizeDate(d) {
 //  ANALYSIS RUNNER
 // ═══════════════════════════════════════════════════════════════════════════
 let parsedData=null, detectedCols=null;
-const ctx={goal:null,comp:'yoy',metric:'',focus:''};
+const ctx={goal:null,comp:'yoy',metric:'',focus:'',use_ga:true};
 let lastRunPayload = null; 
 
 document.getElementById('drop-zone').addEventListener('dragover',e=>{e.preventDefault();e.currentTarget.classList.add('drag');});
@@ -651,6 +672,7 @@ function pick(el,group,val){
 
 async function runAnalysis(){
   ctx.focus=document.getElementById('focus-inp').value;
+  ctx.use_ga = document.getElementById('use-ga-ann').checked;
   if(!ctx.comp) ctx.comp='yoy';
   if(!parsedData||!parsedData.length){alert('Upload a dataset first.');return;}
   show('sec-run');
@@ -881,6 +903,7 @@ async function runAnalysis(){
       } : null,
       grain,
       comp_mode:compMode,
+      ga_annotations: ctx.use_ga ? GA_ANNOTATIONS : null,
       context:`Skiplagged.com — flight search with hidden-city ticketing. Data grain: ${grain}. Comparison mode: ${compMode}. ${ctx.focus||''}`
     };
 
@@ -910,10 +933,16 @@ async function callClaude(statsPayload){
   if (foundDefs.length > 0) {
     dataDictionaryContext = `\n\nDATA DEFINITIONS:\nUse these exact definitions to interpret the metrics. Do NOT assume generic meanings if a definition is provided here:\n${foundDefs.join('\n')}`;
   }
+  
+  let gaContext = "";
+  if (statsPayload.ga_annotations) {
+    const gaList = statsPayload.ga_annotations.map(a => `- ${a.title} (${a.dateRange})${a.description ? ': ' + a.description : ''}`).join('\n');
+    gaContext = `\n\nKNOWN BUSINESS EVENTS (GA Annotations):\nThe following internal events occurred during or near the timeline. Use these to explain anomalies, shifts in trend, or changes in performance if the timing aligns:\n${gaList}`;
+  }
 
   const prompt=`You are a senior business analyst for Skiplagged.com. Statistical computations have already been run — your job is to interpret them into clear business language.
 
-Context: ${statsPayload.context}${dataDictionaryContext}
+Context: ${statsPayload.context}${dataDictionaryContext}${gaContext}
 Goal: ${statsPayload.goal}
 Metric analyzed: ${statsPayload.metric} (n=${statsPayload.n} periods${statsPayload.date_range?`, ${statsPayload.date_range[0]}–${statsPayload.date_range[1]}`:''})
 
@@ -941,7 +970,7 @@ Return ONLY valid JSON (no markdown, no preamble):
     },
     {
       "id": "anomalies",
-      "plain_english": "2-3 sentences about outliers or unusual periods. If no anomalies, explain what that means for the business.",
+      "plain_english": "2-3 sentences about outliers or unusual periods. Reference any known business events (GA annotations) provided if they explain the anomaly. If no anomalies, explain what that means for the business.",
       "what_now": "One concrete action."
     },
     {
@@ -1376,6 +1405,7 @@ function resetAll(){
   document.getElementById('results-container').innerHTML='';
   document.getElementById('paste-area').value='';
   document.getElementById('focus-inp').value='';
+  document.getElementById('use-ga-ann').checked = true;
   document.querySelectorAll('.q-opt').forEach(o=>o.classList.remove('on'));
   ctx.comp='yoy';
   document.querySelector('.q-opt[data-v="yoy"]')?.classList.add('on');
