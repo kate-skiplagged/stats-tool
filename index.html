@@ -765,7 +765,7 @@ function pick(el,group,val){
 }
 
 async function runAnalysis(){
-  ctx.metric=document.getElementById('metric-inp').value;
+ /* ctx.metric=document.getElementById('metric-inp').value;*/
   ctx.focus=document.getElementById('focus-inp').value;
   if(!ctx.comp) ctx.comp='yoy';
   if(!parsedData||!parsedData.length){alert('Upload a dataset first.');return;}
@@ -1185,7 +1185,7 @@ function resetAll(){
   ctx.metric='';
   document.getElementById('results-container').innerHTML='';
   document.getElementById('paste-area').value='';
-  document.getElementById('metric-inp').value='';
+ /* document.getElementById('metric-inp').value=''; */
   document.getElementById('focus-inp').value='';
   document.querySelectorAll('.q-opt').forEach(o=>o.classList.remove('on'));
   ctx.comp='yoy';
