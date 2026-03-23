@@ -991,10 +991,12 @@ Metric analyzed: ${statsPayload.metric} (n=${statsPayload.n} periods${statsPaylo
 Statistical results:
 ${JSON.stringify(statsPayload, null, 2)}
 
-Return ONLY valid, parseable JSON (no markdown, no preamble). 
-CRITICAL RULES:
-1. You MUST escape all double quotes inside your text values (e.g., use \\" instead of "). Do not leave unescaped quotes inside strings.
-2. Do not include trailing commas at the end of lists or objects.
+Return ONLY valid, parseable JSON. Do not include markdown formatting like \`\`\`json. Do not include any introductory or concluding text.
+
+CRITICAL JSON FORMATTING RULES (FAILURE TO FOLLOW WILL CRASH THE SYSTEM):
+1. NEVER use double quotes (") inside your string values. If you must quote a term or event, use 'single quotes' ONLY.
+2. NEVER use literal line breaks or carriage returns inside your string values. Keep all text for a given field on a single, continuous line.
+3. NEVER leave a trailing comma at the end of the JSON object or arrays.
 
 Use this exact JSON structure:
 {
@@ -1017,7 +1019,7 @@ Use this exact JSON structure:
     },
     {
       "id": "anomalies",
-      "plain_english": "2-3 sentences about outliers or unusual periods. Reference any known internal business events (GA annotations) provided OR use your knowledge of major real-world events (e.g., severe weather, airline IT outages, geopolitical conflicts, macroeconomic shifts) around these dates that impact global air travel. If no anomalies, explain what that means.",
+      "plain_english": "2-3 sentences about outliers or unusual periods. Reference any known internal business events (GA annotations) provided OR use your knowledge of major real-world events (e.g., severe weather, airline IT outages, geopolitical conflicts) around these dates that impact global air travel. If no anomalies, explain what that means.",
       "what_now": "One concrete action."
     },
     {
@@ -1041,28 +1043,56 @@ Use this exact JSON structure:
 
   const apiKey = getKey();
   if (!apiKey) { throw new Error('No API key set. Enter your Anthropic API key at the top of the page.'); }
-  const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1800,messages:[{role:'user',content:prompt}]})});
-  if(!res.ok) throw new Error(`Claude API: ${res.status}`);
+  
+  const res=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'x-api-key':apiKey,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    },
+    body:JSON.stringify({
+      model:'claude-3-5-sonnet-20240620', // Explicitly targeting a stable model version
+      max_tokens:2000,
+      temperature:0.1, // Lower temperature to force stricter formatting adherence
+      messages:[{role:'user',content:prompt}]
+    })
+  });
+  
+  if(!res.ok) throw new Error(`Claude API Error: ${res.status} ${res.statusText}`);
+  
   const data=await res.json();
   const txt=data.content?.filter(c=>c.type==='text').map(c=>c.text).join('');
-  if(!txt) throw new Error('No response from Claude');
+  if(!txt) throw new Error('No response body returned from Claude.');
   
-  let clean=txt.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
-  // Strip trailing commas from arrays and objects before parsing
+  // Hardened Parse Logic
+  let clean = txt;
+  
+  // 1. Extract just the JSON object using regex (ignores conversational preamble/postamble)
+  const jsonMatch = clean.match(/\{[\s\S]*\}/);
+  if(jsonMatch) {
+    clean = jsonMatch[0];
+  }
+  
+  // 2. Strip markdown blocks if they slipped through
+  clean = clean.replace(/^```json/mi, '').replace(/```$/m, '').trim();
+  
+  // 3. Strip trailing commas from objects and arrays
   clean = clean.replace(/,\s*([\]}])/g, '$1');
   
   try{
     return JSON.parse(clean);
   }catch(e){
-    const m=clean.match(/\{[\s\S]*\}/);
-    if(m) {
-      try { 
-        return JSON.parse(m[0]); 
-      } catch(e2) { 
-        throw new Error('Claude returned malformed JSON with unescaped characters.'); 
-      }
+    console.error("Failed JSON String:", clean); // Logs to console so you can see exactly what broke it
+    
+    // Attempt a final hail-mary sanitize: remove all literal newlines and control chars
+    try {
+      let desperateClean = clean.replace(/[\n\r\t]/g, ' ');
+      return JSON.parse(desperateClean);
+    } catch(e2) {
+      throw new Error(`Claude returned malformed JSON. Check the browser console (F12) to see the exact syntax error.`);
     }
-    throw new Error('Could not parse Claude response');
   }
 }
 
