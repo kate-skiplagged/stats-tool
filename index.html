@@ -630,16 +630,21 @@ async function runAnalysis(){
     const dateCol=dateCols[0]||null;
     const metricCol=guessMetric(numCols,ctx.metric)||numCols[0];
     if(!metricCol){throw new Error('No numeric columns detected. Check your CSV format.');}
-    const rowVals=r=>parsedData.map(row=>{const v=row[r];return typeof v==='number'?v:parseFloat(v);}).filter(v=>!isNaN(v));
-    const Y=rowVals(metricCol);
-    const dates=dateCol?parsedData.map(r=>String(r[dateCol]).slice(0,7)):Y.map((_,i)=>`T${i+1}`);
+    // Only use rows where metric column is a valid number — guarantees all arrays same length
+    const toNum=v=>typeof v==='number'?v:parseFloat(v);
+    const completeIdx=parsedData.map((_,i)=>i).filter(i=>!isNaN(toNum(parsedData[i][metricCol])));
+    if(completeIdx.length<3){throw new Error('Not enough valid rows in the metric column (need at least 3).');}
+    const getCol=col=>completeIdx.map(i=>{const v=toNum(parsedData[i][col]);return isNaN(v)?0:v;});
+    const Y=getCol(metricCol);
+    const rawDates=dateCol?completeIdx.map(i=>String(parsedData[i][dateCol]).slice(0,7)):[];
+    const dates=rawDates.length?rawDates:Y.map((_,i)=>`T${i+1}`);
     const T=Y.map((_,i)=>i);
     await sleep(700); adv();
 
     // ── 2. Core computations ───────────────────────────────────────────────
     const trend=Stats.linReg(T,Y);
     const pearsonPairs=numCols.filter(c=>c!==metricCol).slice(0,4).map(c=>{
-      const X=rowVals(c);const p=Stats.pearson(X,Y);return{name:c,r:p.r,p:p.pval,data:X};
+      const X=getCol(c);const p=Stats.pearson(X,Y);return{name:c,r:p.r,p:p.pval,data:X};
     }).sort((a,b)=>Math.abs(b.r)-Math.abs(a.r));
     const topPredictors=pearsonPairs.slice(0,2).map(p=>p.data).filter(Boolean);
     const ols=topPredictors.length>0?Stats.olsMultiple([...topPredictors,T],Y):null;
@@ -736,6 +741,7 @@ Return ONLY valid JSON (no markdown, no preamble):
 const chartRegistry=[];
 function renderResults({stats,narrative,Y,dates,T,trend,si_data,pearsonPairs,ols,anom,yoy_data,metricCol,desc,dateCol}){
   chartRegistry.forEach(c=>c.destroy()); chartRegistry.length=0;
+  try {
   const mods=narrative.modules||[];
   const getText=(id,field)=>{const m=mods.find(x=>x.id===id);return m?m[field]||'':'';}
 
@@ -779,7 +785,7 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,pearsonPairs,ols
         <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('seasonality','plain_english')||'No date column detected — seasonal analysis requires a date column.')}</div></div>
         ${si_entries.length?`<div class="chart-wrap"><canvas id="chart-season"></canvas></div>`:''}
         <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('seasonality','what_now'))}</div></div>
-        <div class="tech-row"><span class="tech-tag">Seasonal index (ratio-to-mean)</span>${si_entries.length?`<span class="tech-tag">Peak: ${months_en[(parseInt(([...si_entries].sort((a,b)=>b[1]-a[1])[0]||['1'])[0])||1)-1]}</span>`:''}</div>
+        <div class="tech-row"><span class="tech-tag">Seasonal index (ratio-to-mean)</span>${si_entries.length?`<span class="tech-tag">Peak: ${months_en[(parseInt((([...si_entries].sort((a,b)=>b[1]-a[1])||[[]])[0]||['1'])[0])||1)-1]}</span>`:''}</div>
       </div>
     </div>`;
 
@@ -892,6 +898,11 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,pearsonPairs,ols
       chartRegistry.push(new Chart(sc,{type:'bar',data:{labels:sis.map(([m])=>months_en[parseInt(m)-1]),datasets:[{label:'seasonal index',data:siVals,backgroundColor:siVals.map(v=>v>1?'rgba(0,212,168,0.6)':'rgba(255,107,107,0.5)'),borderRadius:4}]},options:{...chartOpts(),plugins:{legend:{display:false}},scales:{...chartOpts().scales,y:{...chartOpts().scales.y,ticks:{...chartOpts().scales.y.ticks,callback:v=>`${(v*100).toFixed(0)}%`}}}}}));
     }
   },150);
+  } catch(err) {
+    console.error('renderResults crash:', err);
+    document.getElementById('results-container').innerHTML += '<div style="margin-top:12px;padding:10px 14px;background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.2);border-radius:8px;font-family:var(--mono);font-size:11px;color:var(--red)">Render error: ' + (err.message||err) + ' — open browser console (F12) for the exact line</div>';
+    show('sec-results');
+  }
 }
 
 function chartOpts(){
