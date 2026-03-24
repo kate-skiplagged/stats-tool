@@ -191,6 +191,69 @@ textarea:focus{border-color:var(--accent);}
 .dist-skew{background:rgba(245,166,35,.1);color:var(--amber);}
 .dist-bimodal{background:rgba(108,99,255,.1);color:var(--accent);}
 .dist-extreme{background:rgba(255,107,107,.1);color:var(--red);}
+
+/* ── Page nav ── */
+.page-nav{display:flex;gap:4px;margin-bottom:36px;background:var(--surface2);border-radius:10px;padding:4px;}
+.nav-btn{flex:1;padding:9px 16px;border-radius:7px;font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--muted);cursor:pointer;border:none;background:transparent;transition:all .15s;text-align:center;}
+.nav-btn:hover{color:var(--text);}
+.nav-btn.active{background:var(--surface);color:var(--text);border:1px solid var(--border-bright,rgba(255,255,255,.13));}
+
+/* ── Hypothesis testing page ── */
+.hyp-page{display:none;}
+.hyp-page.active{display:block;}
+.analysis-page{display:block;}
+.analysis-page.hidden-page{display:none;}
+
+/* ── Test wizard ── */
+.test-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:24px;}
+.test-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;cursor:pointer;transition:all .15s;}
+.test-card:hover{border-color:var(--bb);}
+.test-card.selected{border-color:var(--accent);background:rgba(108,99,255,.1);}
+.test-card-icon{font-size:22px;margin-bottom:8px;font-family:var(--mono);}
+.test-card-title{font-size:13px;font-weight:600;margin-bottom:4px;}
+.test-card-desc{font-size:11px;color:var(--muted);line-height:1.5;}
+
+/* ── Input groups ── */
+.inp-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
+.inp-grid.cols-3{grid-template-columns:1fr 1fr 1fr;}
+.inp-group label{display:block;font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:6px;}
+.inp-group input,.inp-group select{width:100%;background:var(--surface2);border:1px solid var(--bb);border-radius:7px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;transition:border .15s;}
+.inp-group input:focus,.inp-group select:focus{border-color:var(--accent);}
+.inp-group select option{background:var(--surface);}
+.inp-hint{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:4px;}
+
+/* ── Result cards ── */
+.result-hero{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 28px;margin-bottom:16px;position:relative;overflow:hidden;}
+.result-hero::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+.result-hero.sig::before{background:linear-gradient(90deg,var(--teal),rgba(0,212,168,.2));}
+.result-hero.not-sig::before{background:linear-gradient(90deg,var(--dim),transparent);}
+.result-hero.borderline::before{background:linear-gradient(90deg,var(--amber),rgba(245,166,35,.2));}
+.result-verdict{font-size:20px;font-weight:700;margin-bottom:8px;line-height:1.2;}
+.result-verdict.sig{color:var(--teal);}
+.result-verdict.not-sig{color:var(--muted);}
+.result-verdict.borderline{color:var(--amber);}
+.result-plain{font-size:14px;line-height:1.75;color:var(--text);margin-bottom:0;}
+
+.stats-grid-4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px;}
+.stats-grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:16px;}
+@media(max-width:600px){.stats-grid-4,.stats-grid-3,.inp-grid,.inp-grid.cols-3{grid-template-columns:1fr 1fr;}}
+
+/* ── Visual: rejection region ── */
+.dist-viz{position:relative;height:90px;margin:16px 0;background:var(--surface2);border-radius:8px;overflow:hidden;}
+.dist-bar{position:absolute;bottom:0;width:2px;background:rgba(108,99,255,.5);border-radius:1px 1px 0 0;}
+.dist-reject{position:absolute;bottom:0;top:0;background:rgba(255,107,107,.15);}
+.dist-stat-line{position:absolute;top:0;bottom:0;width:2px;background:var(--amber);}
+.dist-stat-label{position:absolute;top:4px;font-family:var(--mono);font-size:9px;color:var(--amber);}
+.crit-line{position:absolute;top:0;bottom:0;width:1.5px;background:rgba(255,107,107,.7);border-style:dashed;}
+
+/* ── Power meter ── */
+.power-bar-track{height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;margin-top:6px;}
+.power-bar-fill{height:100%;border-radius:4px;transition:width .5s ease;}
+
+/* ── History ── */
+.history-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);font-size:12px;}
+.history-row:last-child{border-bottom:none;}
+.history-badge{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
 </style>
 </head>
 <body>
@@ -200,6 +263,13 @@ textarea:focus{border-color:var(--accent);}
   <div class="logo-mark">k8</div>
   <div class="logo-text">k8's gr8 analysis tool · updated 3/23/26</div>
 </div>
+
+<div class="page-nav no-print">
+  <button class="nav-btn active" id="nav-analysis" onclick="switchPage('analysis')">Analysis</button>
+  <button class="nav-btn" id="nav-hypothesis" onclick="switchPage('hypothesis')">Hypothesis Testing</button>
+</div>
+
+<div id="page-analysis">
 
 <div id="toast" class="toast">Link copied to clipboard!</div>
 
@@ -328,7 +398,303 @@ textarea:focus{border-color:var(--accent);}
   </div>
 </div>
 
-</div><script>
+</div><!-- /page-analysis -->
+
+<!-- ════════════════════════════════════════════════════════════
+     HYPOTHESIS TESTING PAGE
+═════════════════════════════════════════════════════════════ -->
+<div id="page-hypothesis" class="hyp-page">
+
+  <div id="hero-hyp">
+    <h1 style="margin-bottom:10px">Hypothesis<br><em>Testing</em></h1>
+    <p class="hero-sub" style="margin-bottom:40px">Choose a test, enter your numbers. Get a statistically rigorous answer and a plain-English verdict — no math required.</p>
+  </div>
+
+  <!-- Step 1: Pick test type -->
+  <div class="section" id="hyp-step1">
+    <div class="section-label"><span class="section-num">1</span>What are you testing?</div>
+    <div class="card">
+      <div class="test-grid">
+        <div class="test-card selected" id="tc-onesample" onclick="selectTest('one_sample_t')">
+          <div class="test-card-icon">μ₀</div>
+          <div class="test-card-title">One-sample t-test</div>
+          <div class="test-card-desc">Is this mean significantly different from a known or expected value?</div>
+        </div>
+        <div class="test-card" id="tc-twosample" onclick="selectTest('two_sample_t')">
+          <div class="test-card-icon">A/B</div>
+          <div class="test-card-title">Two-sample t-test</div>
+          <div class="test-card-desc">Are the means of two independent groups significantly different?</div>
+        </div>
+        <div class="test-card" id="tc-proportion" onclick="selectTest('proportion_z')">
+          <div class="test-card-icon">p̂</div>
+          <div class="test-card-title">Proportion z-test</div>
+          <div class="test-card-desc">Did a conversion rate, click rate, or other proportion meaningfully change?</div>
+        </div>
+        <div class="test-card" id="tc-twoprop" onclick="selectTest('two_proportion_z')">
+          <div class="test-card-icon">A÷B</div>
+          <div class="test-card-title">Two-proportion z-test</div>
+          <div class="test-card-desc">Are two conversion rates (control vs variant) significantly different?</div>
+        </div>
+        <div class="test-card" id="tc-chisq" onclick="selectTest('chi_square')">
+          <div class="test-card-icon">χ²</div>
+          <div class="test-card-title">Chi-square goodness of fit</div>
+          <div class="test-card-desc">Does the observed distribution match the expected distribution?</div>
+        </div>
+        <div class="test-card" id="tc-paired" onclick="selectTest('paired_t')">
+          <div class="test-card-icon">Δ</div>
+          <div class="test-card-title">Paired t-test</div>
+          <div class="test-card-desc">Did the same group change significantly before vs after an event?</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Enter values -->
+  <!-- Load-from-analysis shortcut -->
+  <div id="hyp-load-banner" style="display:none;margin-bottom:16px">
+    <div class="card" style="padding:16px 20px;border-color:rgba(108,99,255,.3);background:rgba(108,99,255,.06)">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <div style="font-size:13px;font-weight:600;flex:1;min-width:160px">
+          ↺ <span id="hyp-load-label">Analysis data available</span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap" id="hyp-load-btns"></div>
+      </div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:8px" id="hyp-load-desc"></div>
+    </div>
+  </div>
+
+  <div class="section" id="hyp-step2">
+    <div class="section-label"><span class="section-num">2</span>Enter your values</div>
+    <div class="card" id="hyp-inputs-card">
+
+      <!-- One-sample t -->
+      <div id="inputs-one_sample_t">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:18px;font-family:var(--mono)">Test whether a sample mean is different from a known population or target value.</p>
+        <div class="inp-grid cols-3">
+          <div class="inp-group">
+            <label>Sample mean (x̄)</label>
+            <input type="number" id="ost-mean" placeholder="e.g. 18.50" step="any">
+            <div class="inp-hint">Average value you observed</div>
+          </div>
+          <div class="inp-group">
+            <label>Sample std dev (s)</label>
+            <input type="number" id="ost-std" placeholder="e.g. 2.30" step="any" min="0.0001">
+            <div class="inp-hint">Standard deviation of your sample</div>
+          </div>
+          <div class="inp-group">
+            <label>Sample size (n)</label>
+            <input type="number" id="ost-n" placeholder="e.g. 150" min="2">
+            <div class="inp-hint">Number of observations</div>
+          </div>
+        </div>
+        <div class="inp-grid cols-3">
+          <div class="inp-group">
+            <label>Null hypothesis value (μ₀)</label>
+            <input type="number" id="ost-mu" placeholder="e.g. 17.00" step="any">
+            <div class="inp-hint">The value you're testing against</div>
+          </div>
+          <div class="inp-group">
+            <label>Tail</label>
+            <select id="ost-tail">
+              <option value="two">Two-tailed (is it different?)</option>
+              <option value="greater">Upper-tailed (is it greater?)</option>
+              <option value="less">Lower-tailed (is it less?)</option>
+            </select>
+          </div>
+          <div class="inp-group">
+            <label>Significance level (α)</label>
+            <select id="ost-alpha">
+              <option value="0.05" selected>0.05 (standard)</option>
+              <option value="0.01">0.01 (strict)</option>
+              <option value="0.10">0.10 (lenient)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Two-sample t -->
+      <div id="inputs-two_sample_t" style="display:none">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:18px;font-family:var(--mono)">Compare means from two independent groups (e.g. mobile vs desktop revenue per session).</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:16px">
+          <div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--teal);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">Group A</div>
+            <div class="inp-group" style="margin-bottom:12px"><label>Mean (x̄ₐ)</label><input type="number" id="tst-mean-a" placeholder="e.g. 18.50" step="any"></div>
+            <div class="inp-group" style="margin-bottom:12px"><label>Std dev (sₐ)</label><input type="number" id="tst-std-a" placeholder="e.g. 2.30" step="any" min="0.0001"></div>
+            <div class="inp-group"><label>n</label><input type="number" id="tst-n-a" placeholder="e.g. 150" min="2"></div>
+          </div>
+          <div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">Group B</div>
+            <div class="inp-group" style="margin-bottom:12px"><label>Mean (x̄ᵦ)</label><input type="number" id="tst-mean-b" placeholder="e.g. 16.80" step="any"></div>
+            <div class="inp-group" style="margin-bottom:12px"><label>Std dev (sᵦ)</label><input type="number" id="tst-std-b" placeholder="e.g. 2.10" step="any" min="0.0001"></div>
+            <div class="inp-group"><label>n</label><input type="number" id="tst-n-b" placeholder="e.g. 140" min="2"></div>
+          </div>
+        </div>
+        <div class="inp-grid">
+          <div class="inp-group">
+            <label>Tail</label>
+            <select id="tst-tail">
+              <option value="two">Two-tailed (are they different?)</option>
+              <option value="greater">A > B</option>
+              <option value="less">A &lt; B</option>
+            </select>
+          </div>
+          <div class="inp-group">
+            <label>Significance level (α)</label>
+            <select id="tst-alpha">
+              <option value="0.05" selected>0.05</option>
+              <option value="0.01">0.01</option>
+              <option value="0.10">0.10</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Proportion z (one sample) -->
+      <div id="inputs-proportion_z" style="display:none">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:18px;font-family:var(--mono)">Test whether an observed rate (conversion, click-through, booking) is different from a baseline.</p>
+        <div class="inp-grid cols-3">
+          <div class="inp-group">
+            <label>Observed conversions</label>
+            <input type="number" id="pz-x" placeholder="e.g. 312" min="0">
+            <div class="inp-hint">How many successes you saw</div>
+          </div>
+          <div class="inp-group">
+            <label>Total trials (n)</label>
+            <input type="number" id="pz-n" placeholder="e.g. 8200" min="1">
+            <div class="inp-hint">Total observations</div>
+          </div>
+          <div class="inp-group">
+            <label>Baseline rate (p₀)</label>
+            <input type="number" id="pz-p0" placeholder="e.g. 0.035" step="any" min="0" max="1">
+            <div class="inp-hint">Expected or historical rate (0–1)</div>
+          </div>
+        </div>
+        <div class="inp-grid">
+          <div class="inp-group">
+            <label>Tail</label>
+            <select id="pz-tail">
+              <option value="two">Two-tailed (is it different?)</option>
+              <option value="greater">Upper (is it higher?)</option>
+              <option value="less">Lower (is it lower?)</option>
+            </select>
+          </div>
+          <div class="inp-group">
+            <label>Significance level (α)</label>
+            <select id="pz-alpha">
+              <option value="0.05" selected>0.05</option>
+              <option value="0.01">0.01</option>
+              <option value="0.10">0.10</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Two-proportion z -->
+      <div id="inputs-two_proportion_z" style="display:none">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:18px;font-family:var(--mono)">Compare conversion rates between control and variant — the classic A/B test.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:16px">
+          <div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--teal);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">Control</div>
+            <div class="inp-group" style="margin-bottom:12px"><label>Conversions</label><input type="number" id="tpz-x1" placeholder="e.g. 312" min="0"></div>
+            <div class="inp-group"><label>Total (n₁)</label><input type="number" id="tpz-n1" placeholder="e.g. 8200" min="1"></div>
+          </div>
+          <div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">Variant</div>
+            <div class="inp-group" style="margin-bottom:12px"><label>Conversions</label><input type="number" id="tpz-x2" placeholder="e.g. 381" min="0"></div>
+            <div class="inp-group"><label>Total (n₂)</label><input type="number" id="tpz-n2" placeholder="e.g. 8150" min="1"></div>
+          </div>
+        </div>
+        <div class="inp-grid">
+          <div class="inp-group">
+            <label>Tail</label>
+            <select id="tpz-tail">
+              <option value="two">Two-tailed (any difference?)</option>
+              <option value="greater">Variant > Control</option>
+              <option value="less">Variant &lt; Control</option>
+            </select>
+          </div>
+          <div class="inp-group">
+            <label>Significance level (α)</label>
+            <select id="tpz-alpha">
+              <option value="0.05" selected>0.05</option>
+              <option value="0.01">0.01</option>
+              <option value="0.10">0.10</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chi-square goodness of fit -->
+      <div id="inputs-chi_square" style="display:none">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:18px;font-family:var(--mono)">Test whether observed category counts match expected proportions (e.g. channel distribution vs last quarter).</p>
+        <div class="inp-group" style="margin-bottom:16px">
+          <label>Paste observed counts and expected proportions (one row per category)</label>
+          <textarea id="chisq-data" rows="6" placeholder="Category, Observed, Expected%&#10;Email,3200,35&#10;Organic,2800,30&#10;Paid,2100,25&#10;Referral,900,10" style="font-family:var(--mono);font-size:12px;width:100%;background:var(--surface2);border:1px solid var(--bb);border-radius:8px;padding:12px;color:var(--text);outline:none;resize:vertical"></textarea>
+          <div class="inp-hint">Format: Category name, observed count, expected % (must sum to 100)</div>
+        </div>
+        <div class="inp-group">
+          <label>Significance level (α)</label>
+          <select id="chisq-alpha" style="width:200px">
+            <option value="0.05" selected>0.05</option>
+            <option value="0.01">0.01</option>
+            <option value="0.10">0.10</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Paired t -->
+      <div id="inputs-paired_t" style="display:none">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:18px;font-family:var(--mono)">Test whether the same metric changed significantly before vs after an event (launch, campaign, etc.).</p>
+        <div class="inp-group" style="margin-bottom:16px">
+          <label>Paste paired values — one pair per line (before, after)</label>
+          <textarea id="paired-data" rows="8" placeholder="Before,After&#10;1200,1350&#10;980,1100&#10;1450,1520&#10;1100,1280&#10;890,950" style="font-family:var(--mono);font-size:12px;width:100%;background:var(--surface2);border:1px solid var(--bb);border-radius:8px;padding:12px;color:var(--text);outline:none;resize:vertical"></textarea>
+          <div class="inp-hint">Each row is one observation measured twice (e.g. same user/route pre and post)</div>
+        </div>
+        <div class="inp-grid">
+          <div class="inp-group">
+            <label>Tail</label>
+            <select id="paired-tail">
+              <option value="two">Two-tailed (did it change?)</option>
+              <option value="greater">After > Before</option>
+              <option value="less">After &lt; Before</option>
+            </select>
+          </div>
+          <div class="inp-group">
+            <label>Significance level (α)</label>
+            <select id="paired-alpha">
+              <option value="0.05" selected>0.05</option>
+              <option value="0.01">0.01</option>
+              <option value="0.10">0.10</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:20px;display:flex;gap:10px;align-items:center">
+        <button class="btn btn-p" onclick="runHypTest()">Run test →</button>
+        <button class="btn btn-g" onclick="clearHypResult()">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3: Result -->
+  <div class="section" id="hyp-step3" style="display:none">
+    <div class="section-label"><span class="section-num">3</span>Result</div>
+    <div id="hyp-result-container"></div>
+  </div>
+
+  <!-- Test history -->
+  <div class="section" id="hyp-history" style="display:none">
+    <div class="section-label"><span class="section-num">↺</span>Test history</div>
+    <div class="card">
+      <div id="hyp-history-list"></div>
+      <button class="btn btn-g" style="font-size:11px;margin-top:12px" onclick="clearHistory()">Clear history</button>
+    </div>
+  </div>
+
+</div><!-- /page-hypothesis -->
+
+</div><!-- /app --><script>
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  DATA DICTIONARY (Context Engine)
@@ -2031,6 +2397,808 @@ function changeKey() {
   document.getElementById('key-input').value = '';
 }
 
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  LOAD FROM ANALYSIS SHORTCUT
+// ═══════════════════════════════════════════════════════════════════════════
+
+function showLoadBanner() {
+  const banner = document.getElementById('hyp-load-banner');
+  if (!lastRunPayload || !banner) return;
+
+  const st = lastRunPayload;
+  const metricCol = st.metricCol || 'metric';
+  const desc = st.desc;
+  const chs = st.channel_breakdown?.data;
+  const yoys = st.yoy_data;
+  const allDesc = st.allMetricDesc || {};
+
+  const btns = [];
+  const descLines = [];
+
+  // ── Option 1: One-sample t from overall series ────────────────────────────
+  if (desc && desc.n >= 2) {
+    btns.push({ label: 'One-sample t', title: `Load ${metricCol} summary (n=${desc.n})`, fn: 'loadOneSample' });
+    descLines.push(`Series: mean=${fmtVal(desc.mean)}, std=${fmtVal(desc.std)}, n=${desc.n}`);
+  }
+
+  // ── Option 2: Two-sample t from channel breakdown (top 2 channels) ────────
+  if (chs && chs.length >= 2 && st.channel_breakdown?.timeline) {
+    btns.push({ label: 'Two-sample t (channels)', title: `${chs[0].name} vs ${chs[1].name}`, fn: 'loadTwoSampleChannels' });
+    descLines.push(`Channels: ${chs[0].name} vs ${chs[1].name}`);
+  }
+
+  // ── Option 3: Two-sample t from first half vs second half of series ───────
+  const Y = st.Y;
+  if (Y && Y.length >= 6) {
+    btns.push({ label: 'Two-sample t (first vs last half)', title: 'Split series at midpoint', fn: 'loadTwoSampleHalves' });
+  }
+
+  // ── Option 4: Two-proportion z from ratio metric cols ─────────────────────
+  const ratioCols = Object.entries(allDesc).filter(([,cd])=>cd.isRatio && cd.desc?.n >= 2);
+  if (ratioCols.length >= 2) {
+    btns.push({ label: 'Two-proportion z (rates)', title: `${ratioCols[0][0]} vs ${ratioCols[1][0]}`, fn: 'loadTwoProportions' });
+  }
+
+  // ── Option 5: Paired t from period-over-period data ──────────────────────
+  if (yoys && yoys.length >= 3) {
+    const compLabel = { wow:'WoW', mom:'MoM', yoy:'YoY' }[st.compMode] || 'period';
+    btns.push({ label: `Paired t (${compLabel} changes)`, title: `${yoys.length} matched ${compLabel} pairs`, fn: 'loadPairedPeriods' });
+    descLines.push(`${compLabel} pairs: ${yoys.length} comparable periods`);
+  }
+
+  if (!btns.length) { banner.style.display = 'none'; return; }
+
+  document.getElementById('hyp-load-label').textContent =
+    `${metricCol} analysis loaded — pre-populate a test:`;
+  document.getElementById('hyp-load-desc').textContent = descLines.join(' · ');
+  document.getElementById('hyp-load-btns').innerHTML = btns.map(b =>
+    `<button class="btn btn-g" style="font-size:11px;padding:6px 12px" title="${esc(b.title)}" onclick="${b.fn}()">${esc(b.label)} ↗</button>`
+  ).join('');
+
+  banner.style.display = '';
+}
+
+function fmtVal(v) {
+  if (v == null || isNaN(v)) return '—';
+  if (Math.abs(v) >= 1e6) return (v/1e6).toFixed(2)+'M';
+  if (Math.abs(v) >= 1e3) return (v/1e3).toFixed(1)+'K';
+  return v.toFixed(2);
+}
+
+// ── Loader functions ─────────────────────────────────────────────────────────
+
+function loadOneSample() {
+  const st = lastRunPayload;
+  if (!st?.desc) return;
+  selectTest('one_sample_t');
+  document.getElementById('ost-mean').value = st.desc.mean.toFixed(4);
+  document.getElementById('ost-std').value  = st.desc.std.toFixed(4);
+  document.getElementById('ost-n').value    = st.desc.n;
+  // μ₀ defaults to median so user can test "is mean != median" (skewness test)
+  document.getElementById('ost-mu').value   = st.desc.median.toFixed(4);
+  showLoadToast(`Loaded: mean=${fmtVal(st.desc.mean)}, std=${fmtVal(st.desc.std)}, n=${st.desc.n}. Set μ₀ to your target value.`);
+}
+
+function loadTwoSampleChannels() {
+  const st = lastRunPayload;
+  const chs = st?.channel_breakdown?.data;
+  const tl  = st?.channel_breakdown?.timeline;
+  if (!chs || chs.length < 2 || !tl) return;
+
+  selectTest('two_sample_t');
+
+  // Build per-channel series from timeline
+  function channelStats(chName) {
+    const ds = tl.datasets.find(d => d.label === chName);
+    if (!ds || !ds.data.length) return null;
+    const vals = ds.data.filter(v => v != null && !isNaN(v));
+    if (vals.length < 2) return null;
+    const m = vals.reduce((s,v)=>s+v,0)/vals.length;
+    const variance = vals.reduce((s,v)=>s+(v-m)**2,0)/(vals.length-1);
+    return { mean: m, std: Math.sqrt(variance), n: vals.length };
+  }
+
+  const sA = channelStats(chs[0].name);
+  const sB = channelStats(chs[1].name);
+
+  if (sA) {
+    document.getElementById('tst-mean-a').value = sA.mean.toFixed(4);
+    document.getElementById('tst-std-a').value  = sA.std.toFixed(4);
+    document.getElementById('tst-n-a').value    = sA.n;
+  }
+  if (sB) {
+    document.getElementById('tst-mean-b').value = sB.mean.toFixed(4);
+    document.getElementById('tst-std-b').value  = sB.std.toFixed(4);
+    document.getElementById('tst-n-b').value    = sB.n;
+  }
+  showLoadToast(`Loaded: Group A = ${chs[0].name}, Group B = ${chs[1].name}`);
+}
+
+function loadTwoSampleHalves() {
+  const st = lastRunPayload;
+  const Y = st?.Y;
+  if (!Y || Y.length < 6) return;
+
+  selectTest('two_sample_t');
+
+  const half = Math.floor(Y.length / 2);
+  const firstHalf = Y.slice(0, half);
+  const lastHalf  = Y.slice(-half);
+
+  function halfStats(vals) {
+    const m = vals.reduce((s,v)=>s+v,0)/vals.length;
+    const std = Math.sqrt(vals.reduce((s,v)=>s+(v-m)**2,0)/(vals.length-1));
+    return { mean:m, std, n:vals.length };
+  }
+
+  const sA = halfStats(firstHalf);
+  const sB = halfStats(lastHalf);
+  const dateA = st.dates ? `${st.dates[0]}–${st.dates[half-1]}` : 'first half';
+  const dateB = st.dates ? `${st.dates[st.dates.length-half]}–${st.dates[st.dates.length-1]}` : 'last half';
+
+  document.getElementById('tst-mean-a').value = sA.mean.toFixed(4);
+  document.getElementById('tst-std-a').value  = sA.std.toFixed(4);
+  document.getElementById('tst-n-a').value    = sA.n;
+  document.getElementById('tst-mean-b').value = sB.mean.toFixed(4);
+  document.getElementById('tst-std-b').value  = sB.std.toFixed(4);
+  document.getElementById('tst-n-b').value    = sB.n;
+  showLoadToast(`First half (${dateA}) vs last half (${dateB})`);
+}
+
+function loadTwoProportions() {
+  const st = lastRunPayload;
+  const allDesc = st?.allMetricDesc || {};
+  const ratioCols = Object.entries(allDesc).filter(([,cd])=>cd.isRatio && cd.desc?.n >= 2);
+  if (ratioCols.length < 2) return;
+
+  selectTest('two_proportion_z');
+
+  // Use mean rate * n as synthetic x (conversions), n as trials
+  const [colA, cdA] = ratioCols[0];
+  const [colB, cdB] = ratioCols[1];
+
+  const rateA = cdA.desc.mean, nA = cdA.desc.n;
+  const rateB = cdB.desc.mean, nB = cdB.desc.n;
+
+  document.getElementById('tpz-x1').value = Math.round(rateA * nA);
+  document.getElementById('tpz-n1').value = nA;
+  document.getElementById('tpz-x2').value = Math.round(rateB * nB);
+  document.getElementById('tpz-n2').value = nB;
+  showLoadToast(`Loaded: ${colA} (${(rateA*100).toFixed(2)}%) vs ${colB} (${(rateB*100).toFixed(2)}%)`);
+}
+
+function loadPairedPeriods() {
+  const st = lastRunPayload;
+  const yoys = st?.yoy_data;
+  if (!yoys || yoys.length < 3) return;
+
+  selectTest('paired_t');
+
+  const rows = yoys.map(y => `${y.prev_value != null ? y.prev_value.toFixed(2) : y.value.toFixed(2)},${y.value.toFixed(2)}`).join('\n');
+  document.getElementById('paired-data').value = 'Before,After\n' + rows;
+  const compLabel = { wow:'WoW', mom:'MoM', yoy:'YoY' }[st.compMode] || 'period';
+  showLoadToast(`Loaded ${yoys.length} ${compLabel} pairs (before, after values)`);
+}
+
+function showLoadToast(msg) {
+  document.getElementById('hyp-load-desc').textContent = '✓ ' + msg;
+  document.getElementById('hyp-load-desc').style.color = 'var(--teal)';
+  setTimeout(()=>{
+    const el = document.getElementById('hyp-load-desc');
+    if(el) el.style.color = '';
+  }, 3000);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  PAGE NAVIGATION
+// ═══════════════════════════════════════════════════════════════════════════
+function switchPage(page) {
+  document.getElementById('page-analysis').classList.toggle('hidden-page', page !== 'analysis');
+  document.getElementById('page-hypothesis').classList.toggle('active', page === 'hypothesis');
+  document.getElementById('nav-analysis').classList.toggle('active', page === 'analysis');
+  document.getElementById('nav-hypothesis').classList.toggle('active', page === 'hypothesis');
+  if (page === 'hypothesis') showLoadBanner();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  HYPOTHESIS TESTING ENGINE
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Normal CDF (standard)
+function normCDF(z) {
+  const t = 1/(1+0.2316419*Math.abs(z));
+  const d = 0.3989423*Math.exp(-z*z/2);
+  const p = d*t*(0.3193815+t*(-0.3565638+t*(1.7814779+t*(-1.8212560+t*1.3302744))));
+  return z >= 0 ? 1-p : p;
+}
+
+// Inverse normal (for critical values)
+function normInv(p) {
+  if(p<=0) return -Infinity; if(p>=1) return Infinity;
+  const a=[2.50662823884,-18.61500062529,41.39119773534,-25.44106049637];
+  const b=[-8.47351093090,23.08336743743,-21.06224101826,3.13082909833];
+  const c=[0.3374754822726147,0.9761690190917186,0.1607979714918209,0.0276438810333863,0.0038405729373609,0.0003951896511349,0.0000321767881768,0.0000002888167364,0.0000003960315187];
+  const u=p-0.5;
+  if(Math.abs(u)<0.42){
+    const r=u*u;
+    return u*(((a[3]*r+a[2])*r+a[1])*r+a[0])/((((b[3]*r+b[2])*r+b[1])*r+b[0])*r+1);
+  }
+  const r=Math.log(-Math.log(p<0.5?p:1-p));
+  const x=c[0]+r*(c[1]+r*(c[2]+r*(c[3]+r*(c[4]+r*(c[5]+r*(c[6]+r*(c[7]+r*c[8])))))));
+  return p<0.5?-x:x;
+}
+
+// Chi-square CDF via regularized gamma
+function chiSqCDF(x, df) {
+  if(x<=0) return 0;
+  return lowerGamma(df/2, x/2)/gamma(df/2);
+}
+function gamma(n) {
+  if(n<=0) return Infinity;
+  // Lanczos approximation
+  const g=7, c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,-176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  let x=n;
+  if(x<0.5) return Math.PI/(Math.sin(Math.PI*x)*gamma(1-x));
+  x-=1;
+  let a=c[0];
+  const t=x+g+0.5;
+  for(let i=1;i<g+2;i++) a+=c[i]/(x+i);
+  return Math.sqrt(2*Math.PI)*Math.pow(t,x+0.5)*Math.exp(-t)*a;
+}
+function lowerGamma(a, x) {
+  // Series expansion
+  if(x<0) return 0;
+  let sum=1/a, term=1/a;
+  for(let n=1;n<200;n++){
+    term*=x/(a+n);
+    sum+=term;
+    if(Math.abs(term)<1e-10) break;
+  }
+  return sum*Math.exp(-x+a*Math.log(x));
+}
+
+// Power calculation (approximate, two-sample or one-sample)
+function calcPower(tStat, df, alpha, tail) {
+  const critT = tail==='two' ? Stats.tpval(normInv(1-alpha/2),1e6) : Stats.tpval(normInv(1-alpha),1e6);
+  // Non-centrality: approximate
+  const power = tail==='two' ?
+    (1 - normCDF(normInv(1-alpha/2) - Math.abs(tStat)) + normCDF(-normInv(1-alpha/2) - Math.abs(tStat))) :
+    (1 - normCDF(normInv(1-alpha) - Math.abs(tStat)));
+  return Math.min(0.9999, Math.max(0.0001, power));
+}
+
+// Effect size helpers
+function cohensD(mean1, std1, n1, mean2, std2, n2) {
+  const pooledStd = Math.sqrt(((n1-1)*std1*std1 + (n2-1)*std2*std2)/(n1+n2-2));
+  return pooledStd > 0 ? Math.abs(mean1-mean2)/pooledStd : 0;
+}
+function cohensH(p1, p2) {
+  return 2*Math.asin(Math.sqrt(p1)) - 2*Math.asin(Math.sqrt(p2));
+}
+
+// Min sample size for desired power (80%) — approximate
+function minSampleSize(effectSize, alpha, power=0.8, tail='two') {
+  if(effectSize<=0) return Infinity;
+  const zAlpha = tail==='two' ? normInv(1-alpha/2) : normInv(1-alpha);
+  const zBeta = normInv(power);
+  return Math.ceil(2*Math.pow((zAlpha+zBeta)/effectSize, 2));
+}
+
+// p-value from t-stat (uses Stats.tpval)
+function pFromT(t, df, tail) {
+  const p_two = Stats.tpval(t, df);
+  if(tail==='two') return p_two;
+  if(tail==='greater') return t>0 ? p_two/2 : 1-p_two/2;
+  return t<0 ? p_two/2 : 1-p_two/2;
+}
+
+// p-value from z-stat
+function pFromZ(z, tail) {
+  const p_two = 2*(1-normCDF(Math.abs(z)));
+  if(tail==='two') return p_two;
+  if(tail==='greater') return z>0 ? p_two/2 : 1-p_two/2;
+  return z<0 ? p_two/2 : 1-p_two/2;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  INDIVIDUAL TEST FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+function test_one_sample_t() {
+  const xbar = +document.getElementById('ost-mean').value;
+  const s = +document.getElementById('ost-std').value;
+  const n = +document.getElementById('ost-n').value;
+  const mu0 = +document.getElementById('ost-mu').value;
+  const tail = document.getElementById('ost-tail').value;
+  const alpha = +document.getElementById('ost-alpha').value;
+
+  if([xbar,s,n,mu0].some(v=>isNaN(v)||v===0&&['s','n'].includes('s')))
+    return {error:'Please fill in all fields.'};
+  if(s<=0) return {error:'Standard deviation must be positive.'};
+  if(n<2) return {error:'Sample size must be at least 2.'};
+
+  const se = s/Math.sqrt(n);
+  const t = (xbar - mu0)/se;
+  const df = n-1;
+  const pval = pFromT(t, df, tail);
+  const critT = tail==='two'?normInv(1-alpha/2):normInv(1-alpha);
+  const sig = pval < alpha;
+  const d = Math.abs(xbar-mu0)/s; // Cohen's d (one-sample)
+  const power = calcPower(t, df, alpha, tail);
+  const minN = minSampleSize(d, alpha, 0.8, tail);
+
+  // CI
+  const ciZ = normInv(0.975);
+  const ciLo = xbar - ciZ*se;
+  const ciHi = xbar + ciZ*se;
+
+  return {
+    test:'One-sample t-test', sig, tail, alpha,
+    stat_label:'t-statistic', stat: t, df, pval,
+    critT, effectLabel:"Cohen's d", effect: d,
+    power, minN,
+    ciLo, ciHi, ciLevel:95,
+    inputs:{xbar,s,n,mu0},
+    plain: buildPlain_oneSampleT(xbar,s,n,mu0,t,df,pval,sig,alpha,tail,d,power,ciLo,ciHi)
+  };
+}
+
+function test_two_sample_t() {
+  const ma=+document.getElementById('tst-mean-a').value, sa=+document.getElementById('tst-std-a').value, na=+document.getElementById('tst-n-a').value;
+  const mb=+document.getElementById('tst-mean-b').value, sb=+document.getElementById('tst-std-b').value, nb=+document.getElementById('tst-n-b').value;
+  const tail=document.getElementById('tst-tail').value, alpha=+document.getElementById('tst-alpha').value;
+
+  if([ma,sa,na,mb,sb,nb].some(v=>isNaN(v))) return {error:'Please fill in all fields.'};
+  if(sa<=0||sb<=0) return {error:'Standard deviations must be positive.'};
+  if(na<2||nb<2) return {error:'Sample sizes must be at least 2.'};
+
+  // Welch's t-test (unequal variance)
+  const se = Math.sqrt(sa*sa/na + sb*sb/nb);
+  const t = (ma-mb)/se;
+  // Welch-Satterthwaite df
+  const df = Math.pow(sa*sa/na+sb*sb/nb,2) / (Math.pow(sa*sa/na,2)/(na-1) + Math.pow(sb*sb/nb,2)/(nb-1));
+  const pval = pFromT(t, df, tail);
+  const sig = pval < alpha;
+  const d = cohensD(ma,sa,na,mb,sb,nb);
+  const power = calcPower(t, df, alpha, tail);
+  const minN = minSampleSize(d, alpha, 0.8, tail);
+
+  const ciZ = normInv(0.975);
+  const diff = ma-mb;
+  const ciLo = diff - ciZ*se;
+  const ciHi = diff + ciZ*se;
+
+  return {
+    test:"Two-sample t-test (Welch's)", sig, tail, alpha,
+    stat_label:'t-statistic', stat:t, df, pval,
+    effectLabel:"Cohen's d", effect:d, power, minN,
+    ciLo, ciHi, ciLevel:95,
+    diff, inputs:{ma,sa,na,mb,sb,nb},
+    plain: buildPlain_twoSampleT(ma,sa,na,mb,sb,nb,t,df,pval,sig,alpha,tail,d,power,diff,ciLo,ciHi)
+  };
+}
+
+function test_proportion_z() {
+  const x=+document.getElementById('pz-x').value, n=+document.getElementById('pz-n').value, p0=+document.getElementById('pz-p0').value;
+  const tail=document.getElementById('pz-tail').value, alpha=+document.getElementById('pz-alpha').value;
+
+  if([x,n,p0].some(v=>isNaN(v))) return {error:'Please fill in all fields.'};
+  if(n<1) return {error:'n must be at least 1.'};
+  if(p0<=0||p0>=1) return {error:'Baseline rate must be between 0 and 1.'};
+  if(x<0||x>n) return {error:'Conversions must be between 0 and n.'};
+
+  const phat = x/n;
+  const se = Math.sqrt(p0*(1-p0)/n);
+  const z = (phat-p0)/se;
+  const pval = pFromZ(z, tail);
+  const sig = pval < alpha;
+  const h = Math.abs(cohensH(phat, p0));
+  const power = calcPower(z, Infinity, alpha, tail);
+  const minN = minSampleSize(h, alpha, 0.8, tail);
+
+  const ciSe = Math.sqrt(phat*(1-phat)/n);
+  const ciZ = normInv(0.975);
+
+  return {
+    test:'One-proportion z-test', sig, tail, alpha,
+    stat_label:'z-statistic', stat:z, df:Infinity, pval,
+    effectLabel:"Cohen's h", effect:h, power, minN,
+    ciLo:phat-ciZ*ciSe, ciHi:phat+ciZ*ciSe, ciLevel:95,
+    phat, inputs:{x,n,p0},
+    plain: buildPlain_propZ(phat,p0,n,z,pval,sig,alpha,tail,h,power)
+  };
+}
+
+function test_two_proportion_z() {
+  const x1=+document.getElementById('tpz-x1').value, n1=+document.getElementById('tpz-n1').value;
+  const x2=+document.getElementById('tpz-x2').value, n2=+document.getElementById('tpz-n2').value;
+  const tail=document.getElementById('tpz-tail').value, alpha=+document.getElementById('tpz-alpha').value;
+
+  if([x1,n1,x2,n2].some(v=>isNaN(v))) return {error:'Please fill in all fields.'};
+  if(n1<1||n2<1) return {error:'Sample sizes must be at least 1.'};
+
+  const p1=x1/n1, p2=x2/n2;
+  const pPool=(x1+x2)/(n1+n2);
+  const se=Math.sqrt(pPool*(1-pPool)*(1/n1+1/n2));
+  const z=(p2-p1)/se;
+  const pval=pFromZ(z,tail);
+  const sig=pval<alpha;
+  const h=Math.abs(cohensH(p1,p2));
+  const lift=(p1>0)?(p2-p1)/p1*100:0;
+  const power=calcPower(z,Infinity,alpha,tail);
+  const minN=minSampleSize(h,alpha,0.8,tail);
+
+  const ciSe=Math.sqrt(p1*(1-p1)/n1+p2*(1-p2)/n2);
+  const ciZ=normInv(0.975);
+  const diff=p2-p1;
+
+  return {
+    test:'Two-proportion z-test', sig, tail, alpha,
+    stat_label:'z-statistic', stat:z, df:Infinity, pval,
+    effectLabel:"Cohen's h", effect:h, power, minN,
+    ciLo:diff-ciZ*ciSe, ciHi:diff+ciZ*ciSe, ciLevel:95,
+    p1, p2, lift, diff, inputs:{x1,n1,x2,n2},
+    plain: buildPlain_twoPropZ(p1,p2,n1,n2,z,pval,sig,alpha,tail,h,lift,power,diff)
+  };
+}
+
+function test_chi_square() {
+  const raw=document.getElementById('chisq-data').value.trim();
+  const alpha=+document.getElementById('chisq-alpha').value;
+
+  if(!raw) return {error:'Please enter category data.'};
+
+  const rows=raw.split('\n').map(r=>r.trim()).filter(r=>r&&!r.toLowerCase().startsWith('category'));
+  if(rows.length<2) return {error:'Need at least 2 categories.'};
+
+  const cats=[], obs=[], exp_pct=[];
+  for(const row of rows){
+    const parts=row.split(',').map(s=>s.trim());
+    if(parts.length<3) return {error:`Row "${row}" needs 3 columns: Category, Observed, Expected%`};
+    cats.push(parts[0]);
+    const o=+parts[1], e=+parts[2];
+    if(isNaN(o)||isNaN(e)) return {error:`Non-numeric values in row "${row}"`};
+    obs.push(o); exp_pct.push(e);
+  }
+
+  const totalPct=exp_pct.reduce((s,v)=>s+v,0);
+  if(Math.abs(totalPct-100)>1) return {error:`Expected percentages sum to ${totalPct.toFixed(1)}%, must be 100%.`};
+
+  const totalObs=obs.reduce((s,v)=>s+v,0);
+  const exp=exp_pct.map(p=>totalObs*p/100);
+
+  // Check expected cell counts
+  const lowCells=exp.filter(e=>e<5).length;
+
+  let chiSq=0;
+  const contributions=cats.map((c,i)=>{
+    const contrib=Math.pow(obs[i]-exp[i],2)/exp[i];
+    chiSq+=contrib;
+    return {cat:c,obs:obs[i],exp:+exp[i].toFixed(1),contrib:+contrib.toFixed(3),resid:+((obs[i]-exp[i])/Math.sqrt(exp[i])).toFixed(3)};
+  });
+
+  const df=cats.length-1;
+  const pval=1-chiSqCDF(chiSq,df);
+  const sig=pval<alpha;
+  // Cramer's V
+  const cramersV=Math.sqrt(chiSq/(totalObs*(df)));
+
+  return {
+    test:"Chi-square goodness of fit", sig, alpha,
+    stat_label:'χ² statistic', stat:chiSq, df, pval,
+    effectLabel:"Cramér's V", effect:cramersV,
+    power:null, minN:null,
+    contributions, lowCells,
+    plain: buildPlain_chiSq(cats,obs,exp,chiSq,df,pval,sig,alpha,cramersV,contributions,lowCells)
+  };
+}
+
+function test_paired_t() {
+  const raw=document.getElementById('paired-data').value.trim();
+  const tail=document.getElementById('paired-tail').value, alpha=+document.getElementById('paired-alpha').value;
+
+  if(!raw) return {error:'Please paste paired data.'};
+  const rows=raw.split('\n').map(r=>r.trim()).filter(r=>r&&!r.toLowerCase().startsWith('before'));
+  if(rows.length<3) return {error:'Need at least 3 pairs.'};
+
+  const diffs=[];
+  for(const row of rows){
+    const parts=row.split(',').map(s=>+s.trim());
+    if(parts.length<2||isNaN(parts[0])||isNaN(parts[1])) return {error:`Could not parse row: "${row}"`};
+    diffs.push(parts[1]-parts[0]);
+  }
+
+  const n=diffs.length;
+  const dbar=Stats.mean(diffs);
+  const sd=Stats.stddevPop(diffs)*Math.sqrt(n/(n-1)); // sample std dev
+  const se=sd/Math.sqrt(n);
+  const t=dbar/se;
+  const df=n-1;
+  const pval=pFromT(t,df,tail);
+  const sig=pval<alpha;
+  const d=Math.abs(dbar)/sd;
+  const power=calcPower(t,df,alpha,tail);
+  const minN=minSampleSize(d,alpha,0.8,tail);
+  const ciZ=normInv(0.975);
+
+  return {
+    test:'Paired t-test', sig, tail, alpha,
+    stat_label:'t-statistic', stat:t, df, pval,
+    effectLabel:"Cohen's d", effect:d, power, minN,
+    ciLo:dbar-ciZ*se, ciHi:dbar+ciZ*se, ciLevel:95,
+    dbar, sd, n, inputs:{n,dbar,sd},
+    plain: buildPlain_pairedT(diffs,dbar,sd,n,t,df,pval,sig,alpha,tail,d,power)
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  PLAIN ENGLISH BUILDERS
+// ═══════════════════════════════════════════════════════════════════════════
+const fmt3 = v => isNaN(v)?'—':v<0.001?'< 0.001':v.toFixed(3);
+const fmtPct = v => (v*100).toFixed(2)+'%';
+const fmtN = v => v>10000?Math.round(v).toLocaleString():v.toFixed(1);
+const effectLabel = d => Math.abs(d)<0.2?'negligible':Math.abs(d)<0.5?'small':Math.abs(d)<0.8?'medium':'large';
+
+function buildPlain_oneSampleT(xbar,s,n,mu0,t,df,pval,sig,alpha,tail,d,power,ciLo,ciHi){
+  const dir = tail==='two'?'different from':(tail==='greater'?'greater than':'less than');
+  const verdict = sig
+    ? `The observed mean of ${fmtN(xbar)} is statistically significantly ${dir} the target value of ${fmtN(mu0)} (t(${df})=${fmtN(t)}, p=${fmt3(pval)}).`
+    : `There is not enough evidence to conclude the mean (${fmtN(xbar)}) is ${dir} the target (${fmtN(mu0)}) at the α=${alpha} level (p=${fmt3(pval)}).`;
+  const eff = `The effect size is ${effectLabel(d)} (Cohen's d=${d.toFixed(2)}). The 95% CI for the true mean is [${fmtN(ciLo)}, ${fmtN(ciHi)}].`;
+  const pow = power<0.8&&!sig?` Note: observed power is ${(power*100).toFixed(0)}% — this test may be underpowered. Consider collecting more data (estimated minimum n≈${Math.ceil(minSampleSize(d,alpha,0.8,tail))}).`:'';
+  return verdict+' '+eff+pow;
+}
+
+function buildPlain_twoSampleT(ma,sa,na,mb,sb,nb,t,df,pval,sig,alpha,tail,d,power,diff,ciLo,ciHi){
+  const dir=tail==='two'?'different':(tail==='greater'?'higher than B':'lower than B');
+  const verdict=sig
+    ?`Group A (mean=${fmtN(ma)}) is statistically significantly ${dir} from Group B (mean=${fmtN(mb)}) — t(${Math.round(df)})=${fmtN(t)}, p=${fmt3(pval)}.`
+    :`No significant difference was found between Group A (${fmtN(ma)}) and Group B (${fmtN(mb)}) at α=${alpha} (p=${fmt3(pval)}).`;
+  const eff=`The difference is ${fmtN(Math.abs(diff))} (${effectLabel(d)} effect, Cohen's d=${d.toFixed(2)}). 95% CI for the true difference: [${fmtN(ciLo)}, ${fmtN(ciHi)}].`;
+  const pow=power<0.8&&!sig?` Power is ${(power*100).toFixed(0)}% — consider ~${minSampleSize(d,alpha,0.8,tail)} observations per group.`:'';
+  return verdict+' '+eff+pow;
+}
+
+function buildPlain_propZ(phat,p0,n,z,pval,sig,alpha,tail,h,power){
+  const dir=tail==='two'?'different from':(tail==='greater'?'greater than':'less than');
+  const verdict=sig
+    ?`The observed rate of ${fmtPct(phat)} (n=${n.toLocaleString()}) is statistically significantly ${dir} the baseline of ${fmtPct(p0)} (z=${fmtN(z)}, p=${fmt3(pval)}).`
+    :`The observed rate of ${fmtPct(phat)} is not significantly ${dir} the baseline ${fmtPct(p0)} at α=${alpha} (p=${fmt3(pval)}).`;
+  const pow=power<0.8&&!sig?` Power is ${(power*100).toFixed(0)}% — you may need ~${minSampleSize(h,alpha,0.8,tail).toLocaleString()} observations to reliably detect this difference.`:'';
+  return verdict+pow;
+}
+
+function buildPlain_twoPropZ(p1,p2,n1,n2,z,pval,sig,alpha,tail,h,lift,power,diff){
+  const dir=tail==='two'?'different from':(tail==='greater'?'higher than':'lower than');
+  const liftStr=lift>=0?`+${lift.toFixed(1)}%`:`${lift.toFixed(1)}%`;
+  const verdict=sig
+    ?`The variant rate (${fmtPct(p2)}) is statistically significantly ${dir} the control (${fmtPct(p1)}) — a ${liftStr} relative lift (z=${fmtN(z)}, p=${fmt3(pval)}).`
+    :`No significant difference between variant (${fmtPct(p2)}) and control (${fmtPct(p1)}) at α=${alpha} (p=${fmt3(pval)}). The ${liftStr} lift could be noise.`;
+  const pow=power<0.8&&!sig?` Power is ${(power*100).toFixed(0)}% — recommended minimum n≈${minSampleSize(h,alpha,0.8,tail).toLocaleString()} per group for 80% power.`:'';
+  return verdict+pow;
+}
+
+function buildPlain_chiSq(cats,obs,exp,chiSq,df,pval,sig,alpha,V,contributions,lowCells){
+  const verdict=sig
+    ?`The observed distribution is significantly different from the expected distribution (χ²(${df})=${chiSq.toFixed(2)}, p=${fmt3(pval)}).`
+    :`The observed distribution is consistent with the expected distribution (χ²(${df})=${chiSq.toFixed(2)}, p=${fmt3(pval)}) — no significant deviation at α=${alpha}.`;
+  const top=contributions.sort((a,b)=>b.contrib-a.contrib).slice(0,2).map(c=>`${c.cat} (residual=${c.resid>0?'+':''}${c.resid})`).join(' and ');
+  const eff=sig?` The largest deviations are in ${top}. Effect size: Cramér's V=${V.toFixed(3)} (${effectLabel(V)}).`:'';
+  const warn=lowCells>0?` Warning: ${lowCells} cell(s) have expected counts below 5 — chi-square approximation may be unreliable.`:'';
+  return verdict+eff+warn;
+}
+
+function buildPlain_pairedT(diffs,dbar,sd,n,t,df,pval,sig,alpha,tail,d,power){
+  const dir=tail==='two'?'changed':(tail==='greater'?'increased':'decreased');
+  const verdict=sig
+    ?`The metric ${dir} significantly — mean change = ${fmtN(dbar)} (t(${df})=${fmtN(t)}, p=${fmt3(pval)}).`
+    :`No significant ${tail==='two'?'change':'shift'} detected at α=${alpha} (p=${fmt3(pval)}). Mean change was ${fmtN(dbar)}, which could be noise.`;
+  const eff=`Effect size: Cohen's d=${d.toFixed(2)} (${effectLabel(d)}).`;
+  const pow=power<0.8&&!sig?` Power=${(power*100).toFixed(0)}% — more pairs may be needed.`:'';
+  return verdict+' '+eff+pow;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  RENDER RESULT
+// ═══════════════════════════════════════════════════════════════════════════
+let hypTestHistory = [];
+let currentTest = 'one_sample_t';
+
+function selectTest(testId) {
+  currentTest = testId;
+  // Update card selection
+  document.querySelectorAll('.test-card').forEach(c=>c.classList.remove('selected'));
+  const cardMap={one_sample_t:'tc-onesample',two_sample_t:'tc-twosample',proportion_z:'tc-proportion',two_proportion_z:'tc-twoprop',chi_square:'tc-chisq',paired_t:'tc-paired'};
+  document.getElementById(cardMap[testId])?.classList.add('selected');
+  // Show correct inputs
+  document.querySelectorAll('[id^="inputs-"]').forEach(el=>el.style.display='none');
+  const inp = document.getElementById('inputs-'+testId);
+  if(inp) inp.style.display='';
+  // Hide previous result
+  document.getElementById('hyp-step3').style.display='none';
+}
+
+function runHypTest() {
+  const testFns = {one_sample_t:test_one_sample_t,two_sample_t:test_two_sample_t,proportion_z:test_proportion_z,two_proportion_z:test_two_proportion_z,chi_square:test_chi_square,paired_t:test_paired_t};
+  const fn = testFns[currentTest];
+  if(!fn) return;
+  const result = fn();
+  if(result.error){
+    document.getElementById('hyp-result-container').innerHTML=`<div class="error-box">${esc(result.error)}</div>`;
+    document.getElementById('hyp-step3').style.display='';
+    return;
+  }
+  renderHypResult(result);
+  // Add to history
+  hypTestHistory.unshift({test:result.test,sig:result.sig,pval:result.pval,timestamp:new Date().toLocaleTimeString(),result});
+  renderHistory();
+}
+
+function renderHypResult(r) {
+  const container = document.getElementById('hyp-result-container');
+  const sigClass = r.pval < r.alpha ? 'sig' : r.pval < r.alpha*2 ? 'borderline' : 'not-sig';
+  const verdictText = r.pval < r.alpha ? '✓ Statistically significant' : r.pval < r.alpha*2 ? '~ Borderline' : '✗ Not significant';
+  const pFmt = p => isNaN(p)||p===null?'—':p<0.001?'< 0.001':p.toFixed(4);
+
+  // Distribution visualization
+  const vizHTML = buildDistViz(r);
+
+  // Chi-square category breakdown
+  const chiCatsHTML = r.contributions ? `
+    <div style="margin-bottom:16px">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Category breakdown</div>
+      ${r.contributions.map(c=>`<div class="driver-row" style="grid-template-columns:120px 1fr 60px 60px 60px">
+        <span class="d-lbl">${esc(c.cat)}</span>
+        <div class="bar-w"><div class="bar-f" style="width:${Math.min(100,Math.abs(c.resid)/3*100)}%;background:${c.resid>0?'#40C18D':'#ff6b6b'}"></div></div>
+        <span class="d-val">${c.obs}</span>
+        <span class="d-sig">exp ${c.exp}</span>
+        <span class="d-sig" style="color:${Math.abs(c.resid)>2?'var(--amber)':'var(--dim)'}">r=${c.resid}</span>
+      </div>`).join('')}
+      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:8px">r = standardized residual · |r| > 2 suggests notable deviation</div>
+    </div>` : '';
+
+  // Power meter
+  const powerHTML = r.power!=null ? `
+    <div style="margin-bottom:16px">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Statistical power</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="flex:1">
+          <div class="power-bar-track">
+            <div class="power-bar-fill" style="width:${(r.power*100).toFixed(0)}%;background:${r.power>=0.8?'#40C18D':r.power>=0.5?'var(--amber)':'var(--red)'}"></div>
+          </div>
+        </div>
+        <span style="font-family:var(--mono);font-size:13px;font-weight:600;color:${r.power>=0.8?'var(--teal)':r.power>=0.5?'var(--amber)':'var(--red)'};min-width:40px">${(r.power*100).toFixed(0)}%</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--dim)">${r.power>=0.8?'Adequate':'Underpowered'}</span>
+      </div>
+      ${r.minN!=null&&r.power<0.8?`<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:6px">For 80% power: ~${r.minN.toLocaleString()} obs${r.test.includes('wo')?'/group':''}</div>`:''}
+    </div>` : '';
+
+  container.innerHTML = `
+    <div class="result-hero ${sigClass}">
+      <div class="result-verdict ${sigClass}">${verdictText}</div>
+      <p class="result-plain">${esc(r.plain)}</p>
+    </div>
+
+    <div class="stats-grid-4" style="margin-bottom:16px">
+      <div class="stat-c"><div class="stat-lbl">${esc(r.stat_label||'test stat')}</div><div class="stat-val ${sigClass==='sig'?'pos':sigClass==='not-sig'?'neu':'warn'}" style="font-size:18px">${isNaN(r.stat)?'—':r.stat.toFixed(4)}</div></div>
+      <div class="stat-c"><div class="stat-lbl">p-value</div><div class="stat-val ${sigClass==='sig'?'pos':sigClass==='not-sig'?'neu':'warn'}" style="font-size:18px">${pFmt(r.pval)}</div></div>
+      <div class="stat-c"><div class="stat-lbl">${esc(r.effectLabel||'effect size')}</div><div class="stat-val neu" style="font-size:18px">${r.effect!=null?r.effect.toFixed(3):'—'}</div><div style="font-family:var(--mono);font-size:9px;color:var(--dim)">${effectLabel(r.effect||0)}</div></div>
+      <div class="stat-c"><div class="stat-lbl">df</div><div class="stat-val neu" style="font-size:18px">${r.df===Infinity||r.df==null?'∞':Math.round(r.df)}</div></div>
+    </div>
+
+    ${r.ciLo!=null?`<div class="stat-c" style="margin-bottom:16px;background:var(--surface2);padding:12px 16px;border-radius:8px;border:1px solid var(--border)">
+      <div class="stat-lbl">${r.ciLevel||95}% confidence interval</div>
+      <div style="font-family:var(--mono);font-size:14px;color:var(--text);margin-top:4px">[${r.ciLo.toFixed(4)}, ${r.ciHi.toFixed(4)}]</div>
+    </div>`:''}
+
+    ${vizHTML}
+    ${chiCatsHTML}
+    ${powerHTML}
+
+    <div class="tech-row">
+      <span class="tech-tag">${esc(r.test)}</span>
+      <span class="tech-tag">α = ${r.alpha}</span>
+      <span class="tech-tag">${r.tail?r.tail+'-tailed':''}</span>
+      <span class="sig-pill ${sigClass==='sig'?'sig-yes':sigClass==='borderline'?'sig-warn':'sig-no'}">p = ${pFmt(r.pval)}</span>
+    </div>`;
+
+  document.getElementById('hyp-step3').style.display='';
+  document.getElementById('hyp-step3').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function buildDistViz(r) {
+  if(isNaN(r.stat)) return '';
+  const isZ = !isFinite(r.df) || r.df > 200;
+  const label = isZ ? 'z' : 't';
+  const W = 400, H = 80;
+  // Generate distribution curve points
+  const range = 4.5;
+  const pts = 80;
+  const step = range*2/pts;
+  let svgPts = '';
+  for(let i=0;i<=pts;i++){
+    const x = -range + i*step;
+    const y = isZ ? 0.3989*Math.exp(-x*x/2) : 0.3989*Math.exp(-x*x/2); // approx t with normal
+    const px = (x+range)/(range*2)*W;
+    const py = H - y/0.4*H*0.9;
+    svgPts += (i===0?'M':'L') + `${px.toFixed(1)},${py.toFixed(1)} `;
+  }
+  // Rejection regions
+  const alpha = r.alpha || 0.05;
+  const critZ = r.tail==='two' ? normInv(1-alpha/2) : normInv(1-alpha);
+  const critX1 = r.tail==='less' ? (critZ+range)/(range*2)*W : r.tail==='greater' ? 0 : null;
+  const critX2 = r.tail==='less' ? 0 : r.tail==='greater' ? (critZ+range)/(range*2)*W : null;
+  const statX = Math.max(5, Math.min(W-5, (r.stat+range)/(range*2)*W));
+  const critLineX = (critZ+range)/(range*2)*W;
+  const critLineX2 = (-critZ+range)/(range*2)*W;
+
+  const rejectRects = r.tail==='two'
+    ? `<rect x="0" y="0" width="${critLineX2.toFixed(1)}" height="${H}" fill="rgba(255,107,107,0.12)"/>
+       <rect x="${(W-critLineX2).toFixed(1)}" y="0" width="${critLineX2.toFixed(1)}" height="${H}" fill="rgba(255,107,107,0.12)"/>`
+    : r.tail==='greater'
+    ? `<rect x="${critLineX.toFixed(1)}" y="0" width="${(W-critLineX).toFixed(1)}" height="${H}" fill="rgba(255,107,107,0.12)"/>`
+    : `<rect x="0" y="0" width="${(W-critLineX).toFixed(1)}" height="${H}" fill="rgba(255,107,107,0.12)"/>`;
+
+  const critLines = r.tail==='two'
+    ? `<line x1="${critLineX2.toFixed(1)}" y1="0" x2="${critLineX2.toFixed(1)}" y2="${H}" stroke="rgba(255,107,107,0.7)" stroke-width="1.5" stroke-dasharray="4,3"/>
+       <line x1="${(W-critLineX2).toFixed(1)}" y1="0" x2="${(W-critLineX2).toFixed(1)}" y2="${H}" stroke="rgba(255,107,107,0.7)" stroke-width="1.5" stroke-dasharray="4,3"/>`
+    : r.tail==='greater'
+    ? `<line x1="${critLineX.toFixed(1)}" y1="0" x2="${critLineX.toFixed(1)}" y2="${H}" stroke="rgba(255,107,107,0.7)" stroke-width="1.5" stroke-dasharray="4,3"/>`
+    : `<line x1="${(W-critLineX).toFixed(1)}" y1="0" x2="${(W-critLineX).toFixed(1)}" y2="${H}" stroke="rgba(255,107,107,0.7)" stroke-width="1.5" stroke-dasharray="4,3"/>`;
+
+  const sigCol = r.pval < r.alpha ? '#40C18D' : '#f5a623';
+
+  return `<div style="margin-bottom:16px">
+    <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Distribution · ${r.tail||'two'}-tailed at α=${alpha}</div>
+    <svg width="100%" viewBox="0 0 ${W} ${H}" style="background:var(--surface2);border-radius:8px;display:block">
+      ${rejectRects}
+      <path d="${svgPts}" fill="none" stroke="rgba(108,99,255,0.6)" stroke-width="2"/>
+      ${critLines}
+      <line x1="${statX.toFixed(1)}" y1="0" x2="${statX.toFixed(1)}" y2="${H}" stroke="${sigCol}" stroke-width="2"/>
+      <text x="${Math.min(W-45,Math.max(5,statX+4))}" y="14" font-family="monospace" font-size="9" fill="${sigCol}">${label}=${r.stat.toFixed(2)}</text>
+      <text x="4" y="${H-4}" font-family="monospace" font-size="8" fill="rgba(122,120,150,0.7)">${(-range).toFixed(0)}</text>
+      <text x="${W-16}" y="${H-4}" font-family="monospace" font-size="8" fill="rgba(122,120,150,0.7)">${range.toFixed(0)}</text>
+      <text x="${(W/2-8)}" y="${H-4}" font-family="monospace" font-size="8" fill="rgba(122,120,150,0.7)">0</text>
+    </svg>
+    <div style="display:flex;gap:16px;margin-top:6px;font-family:var(--mono);font-size:10px;color:var(--dim)">
+      <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:2px;background:rgba(255,107,107,0.7)"></span>Critical region</span>
+      <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:2px;background:${sigCol}"></span>Test statistic</span>
+    </div>
+  </div>`;
+}
+
+function renderHistory() {
+  if(!hypTestHistory.length) return;
+  const list = document.getElementById('hyp-history-list');
+  const panel = document.getElementById('hyp-history');
+  list.innerHTML = hypTestHistory.slice(0,10).map((h,i)=>`
+    <div class="history-row" style="cursor:pointer" onclick="replayHistory(${i})">
+      <div class="history-badge" style="background:${h.sig?'var(--teal)':h.pval<h.result.alpha*2?'var(--amber)':'var(--dim)'}"></div>
+      <span style="font-weight:600;font-size:12px">${esc(h.test)}</span>
+      <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">p=${h.pval<0.001?'<.001':h.pval.toFixed(3)}</span>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-left:auto">${h.timestamp}</span>
+    </div>`).join('');
+  panel.style.display='';
+}
+
+function replayHistory(i) {
+  if(hypTestHistory[i]) renderHypResult(hypTestHistory[i].result);
+}
+
+function clearHistory() {
+  hypTestHistory=[];
+  document.getElementById('hyp-history').style.display='none';
+}
+
+function clearHypResult() {
+  document.getElementById('hyp-step3').style.display='none';
+  document.getElementById('hyp-result-container').innerHTML='';
+}
+
+
 window.addEventListener('DOMContentLoaded', () => {
   initKeyBanner();
   if (window.location.hash.startsWith('#s=')) {
@@ -2054,4 +3222,4 @@ window.addEventListener('DOMContentLoaded', () => {
 
 </script>
 </body>
-</html> 
+</html>
