@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>k8's gr8 analysis tool</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%232A52D8%22/><text x=%2250%22 y=%2270%22 font-family=%22system-ui, sans-serif%22 font-size=%2255%22 font-weight=%22bold%22 fill=%22white%22 text-anchor=%22middle%22>k8</text></svg>">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;600;700;800&display=swap');
 :root{--bg:#0C0D0E;--surface:#171A1A;--surface2:#212727;--surface3:#2D3434;--border:rgba(255,255,255,0.07);--bb:rgba(255,255,255,0.13);--accent:#2A52D8;--teal:#40C18D;--red:#F8414C;--amber:#FFB800;--text:#F6F7F9;--muted:#A5AAB3;--dim:#7B8B8E;--mono:'DM Mono',monospace;--sans:'Syne',sans-serif;}
@@ -1253,6 +1253,7 @@ function pick(el,group,val){
 }
 
 async function runAnalysis(){
+  const yieldFrame = () => new Promise(r => setTimeout(r, 0));
   ctx.focus=document.getElementById('focus-inp').value;
   ctx.use_ga = document.getElementById('use-ga-ann').checked;
   if(!ctx.comp) ctx.comp='yoy';
@@ -1554,7 +1555,7 @@ async function runAnalysis(){
       }
     });
 
-    await sleep(500); adv(); await sleep(400); adv();
+    await sleep(200); adv(); await yieldFrame(); await sleep(200); adv();
 
     const siEntries=si_data?Object.entries(si_data).sort((a,b)=>b[1]-a[1]):[];
     
@@ -1754,8 +1755,9 @@ Use this exact JSON structure:
 }
 
 const chartRegistry=[];
-function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearsonPairs,ols,olsNames,anom,yoy_data,channel_breakdown,metricCol,desc,dateCol,grain,compMode,isShared,skew,kurt,hist,gaps,allMetricDesc,dqReport}){
+async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearsonPairs,ols,olsNames,anom,yoy_data,channel_breakdown,metricCol,desc,dateCol,grain,compMode,isShared,skew,kurt,hist,gaps,allMetricDesc,dqReport}){
   chartRegistry.forEach(c=>c.destroy()); chartRegistry.length=0;
+  const yieldFrame = () => new Promise(r => setTimeout(r, 0));
   try {
   // Safe defaults so shared links & older payloads never crash new render code
   skew = skew ?? null;
@@ -1797,6 +1799,7 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearson
   const pFmt=p=>{if(p<0.001)return 'p < 0.001';if(p<0.01)return 'p < 0.01';if(p<0.05)return `p = ${p.toFixed(3)}`;return `p = ${p.toFixed(3)}`;};
   const sigClass=p=>p<0.05?'sig-yes':p<0.15?'sig-warn':'sig-no';
 
+  await yieldFrame();
   const trendHTML=`
     <div class="mod-card" id="mc-trend">
       <div class="mod-head">
@@ -1817,6 +1820,7 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearson
       </div>
     </div>`;
 
+  await yieldFrame();
   let seasonDataToRender = [];
   let seasonLabels = [];
   let seasonSubtitle = '';
@@ -1851,6 +1855,7 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearson
       </div>
     </div>`;
 
+  await yieldFrame();
   const maxR=pearsonPairs?.length?Math.max(...pearsonPairs.map(p=>Math.abs(p.r))):1;
   const corrHTML=`
     <div class="mod-card">
@@ -1878,6 +1883,7 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearson
       </div>
     </div>`;
 
+  await yieldFrame();
   const recentAnomalies = anom?.outliers && anom.outliers.length > 0 
       ? [...anom.outliers].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0, 5) 
       : [];
@@ -1908,6 +1914,7 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearson
       </div>
     </div>`;
 
+  await yieldFrame();
   const recentYoy = yoy_data && yoy_data.length > 0 
       ? [...yoy_data].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0, 10) 
       : [];
@@ -1938,6 +1945,7 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearson
       </div>
     </div>`;
 
+  await yieldFrame();
   let channelsHTML = '';
   let channelGrowthHTML = '';
   const chMod = narrative.modules?.find(m => m.id === 'channels');
@@ -2398,6 +2406,11 @@ function changeKey() {
 }
 
 
+
+
+// ── Hypothesis + Load engine: deferred until after first paint ───────────────
+(function deferHypothesisInit() {
+  const init = function() {
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  LOAD FROM ANALYSIS SHORTCUT
@@ -3198,6 +3211,41 @@ function clearHypResult() {
   document.getElementById('hyp-result-container').innerHTML='';
 }
 
+
+    // Expose functions to global scope once initialized
+    window._hypReady = true;
+  };
+  if (typeof requestIdleCallback !== 'undefined') {
+    requestIdleCallback(init, { timeout: 2000 });
+  } else {
+    setTimeout(init, 100);
+  }
+})();
+
+
+window.addEventListener('DOMContentLoaded', () => {
+  initKeyBanner();
+  if (window.location.hash.startsWith('#s=')) {
+    try {
+      const decodedStr = LZString.decompressFromEncodedURIComponent(window.location.hash.substring(3));
+      const sp = JSON.parse(decodedStr);
+      // Ensure new fields have safe defaults so shared links from older encodes still work
+      sp.skew = sp.skew ?? null;
+      sp.kurt = sp.kurt ?? null;
+      sp.hist = sp.hist ?? null;
+      sp.gaps = sp.gaps ?? [];
+      sp.allMetricDesc = sp.allMetricDesc ?? {};
+      sp.dqReport = sp.dqReport ?? null;
+      renderResults(sp);
+    } catch(e) {
+      console.error('Failed to load shared payload', e);
+      window.location.hash = '';
+    }
+  }
+});
+// ── Hypothesis engine: deferred init for faster first paint ─────────────────
+setTimeout(function initHypothesisEngine() {
+}, 50);
 
 window.addEventListener('DOMContentLoaded', () => {
   initKeyBanner();
