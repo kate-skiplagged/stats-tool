@@ -2409,8 +2409,11 @@ function changeKey() {
 
 
 // ── Hypothesis + Load engine: deferred until after first paint ───────────────
-(function deferHypothesisInit() {
-  const init = function() {
+// Functions are defined at module level (global scope) but execution is
+// deferred so they don't block the first paint.
+function _runHypInit() {
+  if (window._hypInitDone) return;
+  window._hypInitDone = true;
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  LOAD FROM ANALYSIS SHORTCUT
@@ -2432,42 +2435,42 @@ function showLoadBanner() {
 
   // ── Option 1: One-sample t from overall series ────────────────────────────
   if (desc && desc.n >= 2) {
-    btns.push({ label: 'One-sample t', title: `Load ${metricCol} summary (n=${desc.n})`, fn: 'loadOneSample' });
-    descLines.push(`Series: mean=${fmtVal(desc.mean)}, std=${fmtVal(desc.std)}, n=${desc.n}`);
+btns.push({ label: 'One-sample t', title: `Load ${metricCol} summary (n=${desc.n})`, fn: 'loadOneSample' });
+descLines.push(`Series: mean=${fmtVal(desc.mean)}, std=${fmtVal(desc.std)}, n=${desc.n}`);
   }
 
   // ── Option 2: Two-sample t from channel breakdown (top 2 channels) ────────
   if (chs && chs.length >= 2 && st.channel_breakdown?.timeline) {
-    btns.push({ label: 'Two-sample t (channels)', title: `${chs[0].name} vs ${chs[1].name}`, fn: 'loadTwoSampleChannels' });
-    descLines.push(`Channels: ${chs[0].name} vs ${chs[1].name}`);
+btns.push({ label: 'Two-sample t (channels)', title: `${chs[0].name} vs ${chs[1].name}`, fn: 'loadTwoSampleChannels' });
+descLines.push(`Channels: ${chs[0].name} vs ${chs[1].name}`);
   }
 
   // ── Option 3: Two-sample t from first half vs second half of series ───────
   const Y = st.Y;
   if (Y && Y.length >= 6) {
-    btns.push({ label: 'Two-sample t (first vs last half)', title: 'Split series at midpoint', fn: 'loadTwoSampleHalves' });
+btns.push({ label: 'Two-sample t (first vs last half)', title: 'Split series at midpoint', fn: 'loadTwoSampleHalves' });
   }
 
   // ── Option 4: Two-proportion z from ratio metric cols ─────────────────────
   const ratioCols = Object.entries(allDesc).filter(([,cd])=>cd.isRatio && cd.desc?.n >= 2);
   if (ratioCols.length >= 2) {
-    btns.push({ label: 'Two-proportion z (rates)', title: `${ratioCols[0][0]} vs ${ratioCols[1][0]}`, fn: 'loadTwoProportions' });
+btns.push({ label: 'Two-proportion z (rates)', title: `${ratioCols[0][0]} vs ${ratioCols[1][0]}`, fn: 'loadTwoProportions' });
   }
 
   // ── Option 5: Paired t from period-over-period data ──────────────────────
   if (yoys && yoys.length >= 3) {
-    const compLabel = { wow:'WoW', mom:'MoM', yoy:'YoY' }[st.compMode] || 'period';
-    btns.push({ label: `Paired t (${compLabel} changes)`, title: `${yoys.length} matched ${compLabel} pairs`, fn: 'loadPairedPeriods' });
-    descLines.push(`${compLabel} pairs: ${yoys.length} comparable periods`);
+const compLabel = { wow:'WoW', mom:'MoM', yoy:'YoY' }[st.compMode] || 'period';
+btns.push({ label: `Paired t (${compLabel} changes)`, title: `${yoys.length} matched ${compLabel} pairs`, fn: 'loadPairedPeriods' });
+descLines.push(`${compLabel} pairs: ${yoys.length} comparable periods`);
   }
 
   if (!btns.length) { banner.style.display = 'none'; return; }
 
   document.getElementById('hyp-load-label').textContent =
-    `${metricCol} analysis loaded — pre-populate a test:`;
+`${metricCol} analysis loaded — pre-populate a test:`;
   document.getElementById('hyp-load-desc').textContent = descLines.join(' · ');
   document.getElementById('hyp-load-btns').innerHTML = btns.map(b =>
-    `<button class="btn btn-g" style="font-size:11px;padding:6px 12px" title="${esc(b.title)}" onclick="${b.fn}()">${esc(b.label)} ↗</button>`
+`<button class="btn btn-g" style="font-size:11px;padding:6px 12px" title="${esc(b.title)}" onclick="${b.fn}()">${esc(b.label)} ↗</button>`
   ).join('');
 
   banner.style.display = '';
@@ -2504,27 +2507,27 @@ function loadTwoSampleChannels() {
 
   // Build per-channel series from timeline
   function channelStats(chName) {
-    const ds = tl.datasets.find(d => d.label === chName);
-    if (!ds || !ds.data.length) return null;
-    const vals = ds.data.filter(v => v != null && !isNaN(v));
-    if (vals.length < 2) return null;
-    const m = vals.reduce((s,v)=>s+v,0)/vals.length;
-    const variance = vals.reduce((s,v)=>s+(v-m)**2,0)/(vals.length-1);
-    return { mean: m, std: Math.sqrt(variance), n: vals.length };
+const ds = tl.datasets.find(d => d.label === chName);
+if (!ds || !ds.data.length) return null;
+const vals = ds.data.filter(v => v != null && !isNaN(v));
+if (vals.length < 2) return null;
+const m = vals.reduce((s,v)=>s+v,0)/vals.length;
+const variance = vals.reduce((s,v)=>s+(v-m)**2,0)/(vals.length-1);
+return { mean: m, std: Math.sqrt(variance), n: vals.length };
   }
 
   const sA = channelStats(chs[0].name);
   const sB = channelStats(chs[1].name);
 
   if (sA) {
-    document.getElementById('tst-mean-a').value = sA.mean.toFixed(4);
-    document.getElementById('tst-std-a').value  = sA.std.toFixed(4);
-    document.getElementById('tst-n-a').value    = sA.n;
+document.getElementById('tst-mean-a').value = sA.mean.toFixed(4);
+document.getElementById('tst-std-a').value  = sA.std.toFixed(4);
+document.getElementById('tst-n-a').value    = sA.n;
   }
   if (sB) {
-    document.getElementById('tst-mean-b').value = sB.mean.toFixed(4);
-    document.getElementById('tst-std-b').value  = sB.std.toFixed(4);
-    document.getElementById('tst-n-b').value    = sB.n;
+document.getElementById('tst-mean-b').value = sB.mean.toFixed(4);
+document.getElementById('tst-std-b').value  = sB.std.toFixed(4);
+document.getElementById('tst-n-b').value    = sB.n;
   }
   showLoadToast(`Loaded: Group A = ${chs[0].name}, Group B = ${chs[1].name}`);
 }
@@ -2541,9 +2544,9 @@ function loadTwoSampleHalves() {
   const lastHalf  = Y.slice(-half);
 
   function halfStats(vals) {
-    const m = vals.reduce((s,v)=>s+v,0)/vals.length;
-    const std = Math.sqrt(vals.reduce((s,v)=>s+(v-m)**2,0)/(vals.length-1));
-    return { mean:m, std, n:vals.length };
+const m = vals.reduce((s,v)=>s+v,0)/vals.length;
+const std = Math.sqrt(vals.reduce((s,v)=>s+(v-m)**2,0)/(vals.length-1));
+return { mean:m, std, n:vals.length };
   }
 
   const sA = halfStats(firstHalf);
@@ -2599,8 +2602,8 @@ function showLoadToast(msg) {
   document.getElementById('hyp-load-desc').textContent = '✓ ' + msg;
   document.getElementById('hyp-load-desc').style.color = 'var(--teal)';
   setTimeout(()=>{
-    const el = document.getElementById('hyp-load-desc');
-    if(el) el.style.color = '';
+const el = document.getElementById('hyp-load-desc');
+if(el) el.style.color = '';
   }, 3000);
 }
 
@@ -2612,7 +2615,11 @@ function switchPage(page) {
   document.getElementById('page-hypothesis').classList.toggle('active', page === 'hypothesis');
   document.getElementById('nav-analysis').classList.toggle('active', page === 'analysis');
   document.getElementById('nav-hypothesis').classList.toggle('active', page === 'hypothesis');
-  if (page === 'hypothesis') showLoadBanner();
+  if (page === 'hypothesis') {
+    // Ensure hypothesis engine is initialized (may not have fired via idle callback yet)
+    _runHypInit();
+    showLoadBanner();
+  }
   window.scrollTo({top: 0, behavior: 'smooth'});
 }
 
@@ -2636,8 +2643,8 @@ function normInv(p) {
   const c=[0.3374754822726147,0.9761690190917186,0.1607979714918209,0.0276438810333863,0.0038405729373609,0.0003951896511349,0.0000321767881768,0.0000002888167364,0.0000003960315187];
   const u=p-0.5;
   if(Math.abs(u)<0.42){
-    const r=u*u;
-    return u*(((a[3]*r+a[2])*r+a[1])*r+a[0])/((((b[3]*r+b[2])*r+b[1])*r+b[0])*r+1);
+const r=u*u;
+return u*(((a[3]*r+a[2])*r+a[1])*r+a[0])/((((b[3]*r+b[2])*r+b[1])*r+b[0])*r+1);
   }
   const r=Math.log(-Math.log(p<0.5?p:1-p));
   const x=c[0]+r*(c[1]+r*(c[2]+r*(c[3]+r*(c[4]+r*(c[5]+r*(c[6]+r*(c[7]+r*c[8])))))));
@@ -2666,9 +2673,9 @@ function lowerGamma(a, x) {
   if(x<0) return 0;
   let sum=1/a, term=1/a;
   for(let n=1;n<200;n++){
-    term*=x/(a+n);
-    sum+=term;
-    if(Math.abs(term)<1e-10) break;
+term*=x/(a+n);
+sum+=term;
+if(Math.abs(term)<1e-10) break;
   }
   return sum*Math.exp(-x+a*Math.log(x));
 }
@@ -2678,8 +2685,8 @@ function calcPower(tStat, df, alpha, tail) {
   const critT = tail==='two' ? Stats.tpval(normInv(1-alpha/2),1e6) : Stats.tpval(normInv(1-alpha),1e6);
   // Non-centrality: approximate
   const power = tail==='two' ?
-    (1 - normCDF(normInv(1-alpha/2) - Math.abs(tStat)) + normCDF(-normInv(1-alpha/2) - Math.abs(tStat))) :
-    (1 - normCDF(normInv(1-alpha) - Math.abs(tStat)));
+(1 - normCDF(normInv(1-alpha/2) - Math.abs(tStat)) + normCDF(-normInv(1-alpha/2) - Math.abs(tStat))) :
+(1 - normCDF(normInv(1-alpha) - Math.abs(tStat)));
   return Math.min(0.9999, Math.max(0.0001, power));
 }
 
@@ -2729,7 +2736,7 @@ function test_one_sample_t() {
   const alpha = +document.getElementById('ost-alpha').value;
 
   if([xbar,s,n,mu0].some(v=>isNaN(v)||v===0&&['s','n'].includes('s')))
-    return {error:'Please fill in all fields.'};
+return {error:'Please fill in all fields.'};
   if(s<=0) return {error:'Standard deviation must be positive.'};
   if(n<2) return {error:'Sample size must be at least 2.'};
 
@@ -2749,13 +2756,13 @@ function test_one_sample_t() {
   const ciHi = xbar + ciZ*se;
 
   return {
-    test:'One-sample t-test', sig, tail, alpha,
-    stat_label:'t-statistic', stat: t, df, pval,
-    critT, effectLabel:"Cohen's d", effect: d,
-    power, minN,
-    ciLo, ciHi, ciLevel:95,
-    inputs:{xbar,s,n,mu0},
-    plain: buildPlain_oneSampleT(xbar,s,n,mu0,t,df,pval,sig,alpha,tail,d,power,ciLo,ciHi)
+test:'One-sample t-test', sig, tail, alpha,
+stat_label:'t-statistic', stat: t, df, pval,
+critT, effectLabel:"Cohen's d", effect: d,
+power, minN,
+ciLo, ciHi, ciLevel:95,
+inputs:{xbar,s,n,mu0},
+plain: buildPlain_oneSampleT(xbar,s,n,mu0,t,df,pval,sig,alpha,tail,d,power,ciLo,ciHi)
   };
 }
 
@@ -2785,12 +2792,12 @@ function test_two_sample_t() {
   const ciHi = diff + ciZ*se;
 
   return {
-    test:"Two-sample t-test (Welch's)", sig, tail, alpha,
-    stat_label:'t-statistic', stat:t, df, pval,
-    effectLabel:"Cohen's d", effect:d, power, minN,
-    ciLo, ciHi, ciLevel:95,
-    diff, inputs:{ma,sa,na,mb,sb,nb},
-    plain: buildPlain_twoSampleT(ma,sa,na,mb,sb,nb,t,df,pval,sig,alpha,tail,d,power,diff,ciLo,ciHi)
+test:"Two-sample t-test (Welch's)", sig, tail, alpha,
+stat_label:'t-statistic', stat:t, df, pval,
+effectLabel:"Cohen's d", effect:d, power, minN,
+ciLo, ciHi, ciLevel:95,
+diff, inputs:{ma,sa,na,mb,sb,nb},
+plain: buildPlain_twoSampleT(ma,sa,na,mb,sb,nb,t,df,pval,sig,alpha,tail,d,power,diff,ciLo,ciHi)
   };
 }
 
@@ -2816,12 +2823,12 @@ function test_proportion_z() {
   const ciZ = normInv(0.975);
 
   return {
-    test:'One-proportion z-test', sig, tail, alpha,
-    stat_label:'z-statistic', stat:z, df:Infinity, pval,
-    effectLabel:"Cohen's h", effect:h, power, minN,
-    ciLo:phat-ciZ*ciSe, ciHi:phat+ciZ*ciSe, ciLevel:95,
-    phat, inputs:{x,n,p0},
-    plain: buildPlain_propZ(phat,p0,n,z,pval,sig,alpha,tail,h,power)
+test:'One-proportion z-test', sig, tail, alpha,
+stat_label:'z-statistic', stat:z, df:Infinity, pval,
+effectLabel:"Cohen's h", effect:h, power, minN,
+ciLo:phat-ciZ*ciSe, ciHi:phat+ciZ*ciSe, ciLevel:95,
+phat, inputs:{x,n,p0},
+plain: buildPlain_propZ(phat,p0,n,z,pval,sig,alpha,tail,h,power)
   };
 }
 
@@ -2849,12 +2856,12 @@ function test_two_proportion_z() {
   const diff=p2-p1;
 
   return {
-    test:'Two-proportion z-test', sig, tail, alpha,
-    stat_label:'z-statistic', stat:z, df:Infinity, pval,
-    effectLabel:"Cohen's h", effect:h, power, minN,
-    ciLo:diff-ciZ*ciSe, ciHi:diff+ciZ*ciSe, ciLevel:95,
-    p1, p2, lift, diff, inputs:{x1,n1,x2,n2},
-    plain: buildPlain_twoPropZ(p1,p2,n1,n2,z,pval,sig,alpha,tail,h,lift,power,diff)
+test:'Two-proportion z-test', sig, tail, alpha,
+stat_label:'z-statistic', stat:z, df:Infinity, pval,
+effectLabel:"Cohen's h", effect:h, power, minN,
+ciLo:diff-ciZ*ciSe, ciHi:diff+ciZ*ciSe, ciLevel:95,
+p1, p2, lift, diff, inputs:{x1,n1,x2,n2},
+plain: buildPlain_twoPropZ(p1,p2,n1,n2,z,pval,sig,alpha,tail,h,lift,power,diff)
   };
 }
 
@@ -2869,12 +2876,12 @@ function test_chi_square() {
 
   const cats=[], obs=[], exp_pct=[];
   for(const row of rows){
-    const parts=row.split(',').map(s=>s.trim());
-    if(parts.length<3) return {error:`Row "${row}" needs 3 columns: Category, Observed, Expected%`};
-    cats.push(parts[0]);
-    const o=+parts[1], e=+parts[2];
-    if(isNaN(o)||isNaN(e)) return {error:`Non-numeric values in row "${row}"`};
-    obs.push(o); exp_pct.push(e);
+const parts=row.split(',').map(s=>s.trim());
+if(parts.length<3) return {error:`Row "${row}" needs 3 columns: Category, Observed, Expected%`};
+cats.push(parts[0]);
+const o=+parts[1], e=+parts[2];
+if(isNaN(o)||isNaN(e)) return {error:`Non-numeric values in row "${row}"`};
+obs.push(o); exp_pct.push(e);
   }
 
   const totalPct=exp_pct.reduce((s,v)=>s+v,0);
@@ -2888,9 +2895,9 @@ function test_chi_square() {
 
   let chiSq=0;
   const contributions=cats.map((c,i)=>{
-    const contrib=Math.pow(obs[i]-exp[i],2)/exp[i];
-    chiSq+=contrib;
-    return {cat:c,obs:obs[i],exp:+exp[i].toFixed(1),contrib:+contrib.toFixed(3),resid:+((obs[i]-exp[i])/Math.sqrt(exp[i])).toFixed(3)};
+const contrib=Math.pow(obs[i]-exp[i],2)/exp[i];
+chiSq+=contrib;
+return {cat:c,obs:obs[i],exp:+exp[i].toFixed(1),contrib:+contrib.toFixed(3),resid:+((obs[i]-exp[i])/Math.sqrt(exp[i])).toFixed(3)};
   });
 
   const df=cats.length-1;
@@ -2900,12 +2907,12 @@ function test_chi_square() {
   const cramersV=Math.sqrt(chiSq/(totalObs*(df)));
 
   return {
-    test:"Chi-square goodness of fit", sig, alpha,
-    stat_label:'χ² statistic', stat:chiSq, df, pval,
-    effectLabel:"Cramér's V", effect:cramersV,
-    power:null, minN:null,
-    contributions, lowCells,
-    plain: buildPlain_chiSq(cats,obs,exp,chiSq,df,pval,sig,alpha,cramersV,contributions,lowCells)
+test:"Chi-square goodness of fit", sig, alpha,
+stat_label:'χ² statistic', stat:chiSq, df, pval,
+effectLabel:"Cramér's V", effect:cramersV,
+power:null, minN:null,
+contributions, lowCells,
+plain: buildPlain_chiSq(cats,obs,exp,chiSq,df,pval,sig,alpha,cramersV,contributions,lowCells)
   };
 }
 
@@ -2919,9 +2926,9 @@ function test_paired_t() {
 
   const diffs=[];
   for(const row of rows){
-    const parts=row.split(',').map(s=>+s.trim());
-    if(parts.length<2||isNaN(parts[0])||isNaN(parts[1])) return {error:`Could not parse row: "${row}"`};
-    diffs.push(parts[1]-parts[0]);
+const parts=row.split(',').map(s=>+s.trim());
+if(parts.length<2||isNaN(parts[0])||isNaN(parts[1])) return {error:`Could not parse row: "${row}"`};
+diffs.push(parts[1]-parts[0]);
   }
 
   const n=diffs.length;
@@ -2938,12 +2945,12 @@ function test_paired_t() {
   const ciZ=normInv(0.975);
 
   return {
-    test:'Paired t-test', sig, tail, alpha,
-    stat_label:'t-statistic', stat:t, df, pval,
-    effectLabel:"Cohen's d", effect:d, power, minN,
-    ciLo:dbar-ciZ*se, ciHi:dbar+ciZ*se, ciLevel:95,
-    dbar, sd, n, inputs:{n,dbar,sd},
-    plain: buildPlain_pairedT(diffs,dbar,sd,n,t,df,pval,sig,alpha,tail,d,power)
+test:'Paired t-test', sig, tail, alpha,
+stat_label:'t-statistic', stat:t, df, pval,
+effectLabel:"Cohen's d", effect:d, power, minN,
+ciLo:dbar-ciZ*se, ciHi:dbar+ciZ*se, ciLevel:95,
+dbar, sd, n, inputs:{n,dbar,sd},
+plain: buildPlain_pairedT(diffs,dbar,sd,n,t,df,pval,sig,alpha,tail,d,power)
   };
 }
 
@@ -2958,8 +2965,8 @@ const effectLabel = d => Math.abs(d)<0.2?'negligible':Math.abs(d)<0.5?'small':Ma
 function buildPlain_oneSampleT(xbar,s,n,mu0,t,df,pval,sig,alpha,tail,d,power,ciLo,ciHi){
   const dir = tail==='two'?'different from':(tail==='greater'?'greater than':'less than');
   const verdict = sig
-    ? `The observed mean of ${fmtN(xbar)} is statistically significantly ${dir} the target value of ${fmtN(mu0)} (t(${df})=${fmtN(t)}, p=${fmt3(pval)}).`
-    : `There is not enough evidence to conclude the mean (${fmtN(xbar)}) is ${dir} the target (${fmtN(mu0)}) at the α=${alpha} level (p=${fmt3(pval)}).`;
+? `The observed mean of ${fmtN(xbar)} is statistically significantly ${dir} the target value of ${fmtN(mu0)} (t(${df})=${fmtN(t)}, p=${fmt3(pval)}).`
+: `There is not enough evidence to conclude the mean (${fmtN(xbar)}) is ${dir} the target (${fmtN(mu0)}) at the α=${alpha} level (p=${fmt3(pval)}).`;
   const eff = `The effect size is ${effectLabel(d)} (Cohen's d=${d.toFixed(2)}). The 95% CI for the true mean is [${fmtN(ciLo)}, ${fmtN(ciHi)}].`;
   const pow = power<0.8&&!sig?` Note: observed power is ${(power*100).toFixed(0)}% — this test may be underpowered. Consider collecting more data (estimated minimum n≈${Math.ceil(minSampleSize(d,alpha,0.8,tail))}).`:'';
   return verdict+' '+eff+pow;
@@ -2968,8 +2975,8 @@ function buildPlain_oneSampleT(xbar,s,n,mu0,t,df,pval,sig,alpha,tail,d,power,ciL
 function buildPlain_twoSampleT(ma,sa,na,mb,sb,nb,t,df,pval,sig,alpha,tail,d,power,diff,ciLo,ciHi){
   const dir=tail==='two'?'different':(tail==='greater'?'higher than B':'lower than B');
   const verdict=sig
-    ?`Group A (mean=${fmtN(ma)}) is statistically significantly ${dir} from Group B (mean=${fmtN(mb)}) — t(${Math.round(df)})=${fmtN(t)}, p=${fmt3(pval)}.`
-    :`No significant difference was found between Group A (${fmtN(ma)}) and Group B (${fmtN(mb)}) at α=${alpha} (p=${fmt3(pval)}).`;
+?`Group A (mean=${fmtN(ma)}) is statistically significantly ${dir} from Group B (mean=${fmtN(mb)}) — t(${Math.round(df)})=${fmtN(t)}, p=${fmt3(pval)}.`
+:`No significant difference was found between Group A (${fmtN(ma)}) and Group B (${fmtN(mb)}) at α=${alpha} (p=${fmt3(pval)}).`;
   const eff=`The difference is ${fmtN(Math.abs(diff))} (${effectLabel(d)} effect, Cohen's d=${d.toFixed(2)}). 95% CI for the true difference: [${fmtN(ciLo)}, ${fmtN(ciHi)}].`;
   const pow=power<0.8&&!sig?` Power is ${(power*100).toFixed(0)}% — consider ~${minSampleSize(d,alpha,0.8,tail)} observations per group.`:'';
   return verdict+' '+eff+pow;
@@ -2978,8 +2985,8 @@ function buildPlain_twoSampleT(ma,sa,na,mb,sb,nb,t,df,pval,sig,alpha,tail,d,powe
 function buildPlain_propZ(phat,p0,n,z,pval,sig,alpha,tail,h,power){
   const dir=tail==='two'?'different from':(tail==='greater'?'greater than':'less than');
   const verdict=sig
-    ?`The observed rate of ${fmtPct(phat)} (n=${n.toLocaleString()}) is statistically significantly ${dir} the baseline of ${fmtPct(p0)} (z=${fmtN(z)}, p=${fmt3(pval)}).`
-    :`The observed rate of ${fmtPct(phat)} is not significantly ${dir} the baseline ${fmtPct(p0)} at α=${alpha} (p=${fmt3(pval)}).`;
+?`The observed rate of ${fmtPct(phat)} (n=${n.toLocaleString()}) is statistically significantly ${dir} the baseline of ${fmtPct(p0)} (z=${fmtN(z)}, p=${fmt3(pval)}).`
+:`The observed rate of ${fmtPct(phat)} is not significantly ${dir} the baseline ${fmtPct(p0)} at α=${alpha} (p=${fmt3(pval)}).`;
   const pow=power<0.8&&!sig?` Power is ${(power*100).toFixed(0)}% — you may need ~${minSampleSize(h,alpha,0.8,tail).toLocaleString()} observations to reliably detect this difference.`:'';
   return verdict+pow;
 }
@@ -2988,16 +2995,16 @@ function buildPlain_twoPropZ(p1,p2,n1,n2,z,pval,sig,alpha,tail,h,lift,power,diff
   const dir=tail==='two'?'different from':(tail==='greater'?'higher than':'lower than');
   const liftStr=lift>=0?`+${lift.toFixed(1)}%`:`${lift.toFixed(1)}%`;
   const verdict=sig
-    ?`The variant rate (${fmtPct(p2)}) is statistically significantly ${dir} the control (${fmtPct(p1)}) — a ${liftStr} relative lift (z=${fmtN(z)}, p=${fmt3(pval)}).`
-    :`No significant difference between variant (${fmtPct(p2)}) and control (${fmtPct(p1)}) at α=${alpha} (p=${fmt3(pval)}). The ${liftStr} lift could be noise.`;
+?`The variant rate (${fmtPct(p2)}) is statistically significantly ${dir} the control (${fmtPct(p1)}) — a ${liftStr} relative lift (z=${fmtN(z)}, p=${fmt3(pval)}).`
+:`No significant difference between variant (${fmtPct(p2)}) and control (${fmtPct(p1)}) at α=${alpha} (p=${fmt3(pval)}). The ${liftStr} lift could be noise.`;
   const pow=power<0.8&&!sig?` Power is ${(power*100).toFixed(0)}% — recommended minimum n≈${minSampleSize(h,alpha,0.8,tail).toLocaleString()} per group for 80% power.`:'';
   return verdict+pow;
 }
 
 function buildPlain_chiSq(cats,obs,exp,chiSq,df,pval,sig,alpha,V,contributions,lowCells){
   const verdict=sig
-    ?`The observed distribution is significantly different from the expected distribution (χ²(${df})=${chiSq.toFixed(2)}, p=${fmt3(pval)}).`
-    :`The observed distribution is consistent with the expected distribution (χ²(${df})=${chiSq.toFixed(2)}, p=${fmt3(pval)}) — no significant deviation at α=${alpha}.`;
+?`The observed distribution is significantly different from the expected distribution (χ²(${df})=${chiSq.toFixed(2)}, p=${fmt3(pval)}).`
+:`The observed distribution is consistent with the expected distribution (χ²(${df})=${chiSq.toFixed(2)}, p=${fmt3(pval)}) — no significant deviation at α=${alpha}.`;
   const top=contributions.sort((a,b)=>b.contrib-a.contrib).slice(0,2).map(c=>`${c.cat} (residual=${c.resid>0?'+':''}${c.resid})`).join(' and ');
   const eff=sig?` The largest deviations are in ${top}. Effect size: Cramér's V=${V.toFixed(3)} (${effectLabel(V)}).`:'';
   const warn=lowCells>0?` Warning: ${lowCells} cell(s) have expected counts below 5 — chi-square approximation may be unreliable.`:'';
@@ -3007,8 +3014,8 @@ function buildPlain_chiSq(cats,obs,exp,chiSq,df,pval,sig,alpha,V,contributions,l
 function buildPlain_pairedT(diffs,dbar,sd,n,t,df,pval,sig,alpha,tail,d,power){
   const dir=tail==='two'?'changed':(tail==='greater'?'increased':'decreased');
   const verdict=sig
-    ?`The metric ${dir} significantly — mean change = ${fmtN(dbar)} (t(${df})=${fmtN(t)}, p=${fmt3(pval)}).`
-    :`No significant ${tail==='two'?'change':'shift'} detected at α=${alpha} (p=${fmt3(pval)}). Mean change was ${fmtN(dbar)}, which could be noise.`;
+?`The metric ${dir} significantly — mean change = ${fmtN(dbar)} (t(${df})=${fmtN(t)}, p=${fmt3(pval)}).`
+:`No significant ${tail==='two'?'change':'shift'} detected at α=${alpha} (p=${fmt3(pval)}). Mean change was ${fmtN(dbar)}, which could be noise.`;
   const eff=`Effect size: Cohen's d=${d.toFixed(2)} (${effectLabel(d)}).`;
   const pow=power<0.8&&!sig?` Power=${(power*100).toFixed(0)}% — more pairs may be needed.`:'';
   return verdict+' '+eff+pow;
@@ -3040,9 +3047,9 @@ function runHypTest() {
   if(!fn) return;
   const result = fn();
   if(result.error){
-    document.getElementById('hyp-result-container').innerHTML=`<div class="error-box">${esc(result.error)}</div>`;
-    document.getElementById('hyp-step3').style.display='';
-    return;
+document.getElementById('hyp-result-container').innerHTML=`<div class="error-box">${esc(result.error)}</div>`;
+document.getElementById('hyp-step3').style.display='';
+return;
   }
   renderHypResult(result);
   // Add to history
@@ -3061,62 +3068,62 @@ function renderHypResult(r) {
 
   // Chi-square category breakdown
   const chiCatsHTML = r.contributions ? `
-    <div style="margin-bottom:16px">
-      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Category breakdown</div>
-      ${r.contributions.map(c=>`<div class="driver-row" style="grid-template-columns:120px 1fr 60px 60px 60px">
-        <span class="d-lbl">${esc(c.cat)}</span>
-        <div class="bar-w"><div class="bar-f" style="width:${Math.min(100,Math.abs(c.resid)/3*100)}%;background:${c.resid>0?'#40C18D':'#ff6b6b'}"></div></div>
-        <span class="d-val">${c.obs}</span>
-        <span class="d-sig">exp ${c.exp}</span>
-        <span class="d-sig" style="color:${Math.abs(c.resid)>2?'var(--amber)':'var(--dim)'}">r=${c.resid}</span>
-      </div>`).join('')}
-      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:8px">r = standardized residual · |r| > 2 suggests notable deviation</div>
-    </div>` : '';
+<div style="margin-bottom:16px">
+  <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Category breakdown</div>
+  ${r.contributions.map(c=>`<div class="driver-row" style="grid-template-columns:120px 1fr 60px 60px 60px">
+    <span class="d-lbl">${esc(c.cat)}</span>
+    <div class="bar-w"><div class="bar-f" style="width:${Math.min(100,Math.abs(c.resid)/3*100)}%;background:${c.resid>0?'#40C18D':'#ff6b6b'}"></div></div>
+    <span class="d-val">${c.obs}</span>
+    <span class="d-sig">exp ${c.exp}</span>
+    <span class="d-sig" style="color:${Math.abs(c.resid)>2?'var(--amber)':'var(--dim)'}">r=${c.resid}</span>
+  </div>`).join('')}
+  <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:8px">r = standardized residual · |r| > 2 suggests notable deviation</div>
+</div>` : '';
 
   // Power meter
   const powerHTML = r.power!=null ? `
-    <div style="margin-bottom:16px">
-      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Statistical power</div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <div style="flex:1">
-          <div class="power-bar-track">
-            <div class="power-bar-fill" style="width:${(r.power*100).toFixed(0)}%;background:${r.power>=0.8?'#40C18D':r.power>=0.5?'var(--amber)':'var(--red)'}"></div>
-          </div>
-        </div>
-        <span style="font-family:var(--mono);font-size:13px;font-weight:600;color:${r.power>=0.8?'var(--teal)':r.power>=0.5?'var(--amber)':'var(--red)'};min-width:40px">${(r.power*100).toFixed(0)}%</span>
-        <span style="font-family:var(--mono);font-size:11px;color:var(--dim)">${r.power>=0.8?'Adequate':'Underpowered'}</span>
+<div style="margin-bottom:16px">
+  <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Statistical power</div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div style="flex:1">
+      <div class="power-bar-track">
+        <div class="power-bar-fill" style="width:${(r.power*100).toFixed(0)}%;background:${r.power>=0.8?'#40C18D':r.power>=0.5?'var(--amber)':'var(--red)'}"></div>
       </div>
-      ${r.minN!=null&&r.power<0.8?`<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:6px">For 80% power: ~${r.minN.toLocaleString()} obs${r.test.includes('wo')?'/group':''}</div>`:''}
-    </div>` : '';
+    </div>
+    <span style="font-family:var(--mono);font-size:13px;font-weight:600;color:${r.power>=0.8?'var(--teal)':r.power>=0.5?'var(--amber)':'var(--red)'};min-width:40px">${(r.power*100).toFixed(0)}%</span>
+    <span style="font-family:var(--mono);font-size:11px;color:var(--dim)">${r.power>=0.8?'Adequate':'Underpowered'}</span>
+  </div>
+  ${r.minN!=null&&r.power<0.8?`<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:6px">For 80% power: ~${r.minN.toLocaleString()} obs${r.test.includes('wo')?'/group':''}</div>`:''}
+</div>` : '';
 
   container.innerHTML = `
-    <div class="result-hero ${sigClass}">
-      <div class="result-verdict ${sigClass}">${verdictText}</div>
-      <p class="result-plain">${esc(r.plain)}</p>
-    </div>
+<div class="result-hero ${sigClass}">
+  <div class="result-verdict ${sigClass}">${verdictText}</div>
+  <p class="result-plain">${esc(r.plain)}</p>
+</div>
 
-    <div class="stats-grid-4" style="margin-bottom:16px">
-      <div class="stat-c"><div class="stat-lbl">${esc(r.stat_label||'test stat')}</div><div class="stat-val ${sigClass==='sig'?'pos':sigClass==='not-sig'?'neu':'warn'}" style="font-size:18px">${isNaN(r.stat)?'—':r.stat.toFixed(4)}</div></div>
-      <div class="stat-c"><div class="stat-lbl">p-value</div><div class="stat-val ${sigClass==='sig'?'pos':sigClass==='not-sig'?'neu':'warn'}" style="font-size:18px">${pFmt(r.pval)}</div></div>
-      <div class="stat-c"><div class="stat-lbl">${esc(r.effectLabel||'effect size')}</div><div class="stat-val neu" style="font-size:18px">${r.effect!=null?r.effect.toFixed(3):'—'}</div><div style="font-family:var(--mono);font-size:9px;color:var(--dim)">${effectLabel(r.effect||0)}</div></div>
-      <div class="stat-c"><div class="stat-lbl">df</div><div class="stat-val neu" style="font-size:18px">${r.df===Infinity||r.df==null?'∞':Math.round(r.df)}</div></div>
-    </div>
+<div class="stats-grid-4" style="margin-bottom:16px">
+  <div class="stat-c"><div class="stat-lbl">${esc(r.stat_label||'test stat')}</div><div class="stat-val ${sigClass==='sig'?'pos':sigClass==='not-sig'?'neu':'warn'}" style="font-size:18px">${isNaN(r.stat)?'—':r.stat.toFixed(4)}</div></div>
+  <div class="stat-c"><div class="stat-lbl">p-value</div><div class="stat-val ${sigClass==='sig'?'pos':sigClass==='not-sig'?'neu':'warn'}" style="font-size:18px">${pFmt(r.pval)}</div></div>
+  <div class="stat-c"><div class="stat-lbl">${esc(r.effectLabel||'effect size')}</div><div class="stat-val neu" style="font-size:18px">${r.effect!=null?r.effect.toFixed(3):'—'}</div><div style="font-family:var(--mono);font-size:9px;color:var(--dim)">${effectLabel(r.effect||0)}</div></div>
+  <div class="stat-c"><div class="stat-lbl">df</div><div class="stat-val neu" style="font-size:18px">${r.df===Infinity||r.df==null?'∞':Math.round(r.df)}</div></div>
+</div>
 
-    ${r.ciLo!=null?`<div class="stat-c" style="margin-bottom:16px;background:var(--surface2);padding:12px 16px;border-radius:8px;border:1px solid var(--border)">
-      <div class="stat-lbl">${r.ciLevel||95}% confidence interval</div>
-      <div style="font-family:var(--mono);font-size:14px;color:var(--text);margin-top:4px">[${r.ciLo.toFixed(4)}, ${r.ciHi.toFixed(4)}]</div>
-    </div>`:''}
+${r.ciLo!=null?`<div class="stat-c" style="margin-bottom:16px;background:var(--surface2);padding:12px 16px;border-radius:8px;border:1px solid var(--border)">
+  <div class="stat-lbl">${r.ciLevel||95}% confidence interval</div>
+  <div style="font-family:var(--mono);font-size:14px;color:var(--text);margin-top:4px">[${r.ciLo.toFixed(4)}, ${r.ciHi.toFixed(4)}]</div>
+</div>`:''}
 
-    ${vizHTML}
-    ${chiCatsHTML}
-    ${powerHTML}
+${vizHTML}
+${chiCatsHTML}
+${powerHTML}
 
-    <div class="tech-row">
-      <span class="tech-tag">${esc(r.test)}</span>
-      <span class="tech-tag">α = ${r.alpha}</span>
-      <span class="tech-tag">${r.tail?r.tail+'-tailed':''}</span>
-      <span class="sig-pill ${sigClass==='sig'?'sig-yes':sigClass==='borderline'?'sig-warn':'sig-no'}">p = ${pFmt(r.pval)}</span>
-    </div>`;
+<div class="tech-row">
+  <span class="tech-tag">${esc(r.test)}</span>
+  <span class="tech-tag">α = ${r.alpha}</span>
+  <span class="tech-tag">${r.tail?r.tail+'-tailed':''}</span>
+  <span class="sig-pill ${sigClass==='sig'?'sig-yes':sigClass==='borderline'?'sig-warn':'sig-no'}">p = ${pFmt(r.pval)}</span>
+</div>`;
 
   document.getElementById('hyp-step3').style.display='';
   document.getElementById('hyp-step3').scrollIntoView({behavior:'smooth',block:'start'});
@@ -3133,11 +3140,11 @@ function buildDistViz(r) {
   const step = range*2/pts;
   let svgPts = '';
   for(let i=0;i<=pts;i++){
-    const x = -range + i*step;
-    const y = isZ ? 0.3989*Math.exp(-x*x/2) : 0.3989*Math.exp(-x*x/2); // approx t with normal
-    const px = (x+range)/(range*2)*W;
-    const py = H - y/0.4*H*0.9;
-    svgPts += (i===0?'M':'L') + `${px.toFixed(1)},${py.toFixed(1)} `;
+const x = -range + i*step;
+const y = isZ ? 0.3989*Math.exp(-x*x/2) : 0.3989*Math.exp(-x*x/2); // approx t with normal
+const px = (x+range)/(range*2)*W;
+const py = H - y/0.4*H*0.9;
+svgPts += (i===0?'M':'L') + `${px.toFixed(1)},${py.toFixed(1)} `;
   }
   // Rejection regions
   const alpha = r.alpha || 0.05;
@@ -3149,37 +3156,37 @@ function buildDistViz(r) {
   const critLineX2 = (-critZ+range)/(range*2)*W;
 
   const rejectRects = r.tail==='two'
-    ? `<rect x="0" y="0" width="${critLineX2.toFixed(1)}" height="${H}" fill="rgba(255,107,107,0.12)"/>
-       <rect x="${(W-critLineX2).toFixed(1)}" y="0" width="${critLineX2.toFixed(1)}" height="${H}" fill="rgba(255,107,107,0.12)"/>`
-    : r.tail==='greater'
-    ? `<rect x="${critLineX.toFixed(1)}" y="0" width="${(W-critLineX).toFixed(1)}" height="${H}" fill="rgba(255,107,107,0.12)"/>`
-    : `<rect x="0" y="0" width="${(W-critLineX).toFixed(1)}" height="${H}" fill="rgba(255,107,107,0.12)"/>`;
+? `<rect x="0" y="0" width="${critLineX2.toFixed(1)}" height="${H}" fill="rgba(255,107,107,0.12)"/>
+   <rect x="${(W-critLineX2).toFixed(1)}" y="0" width="${critLineX2.toFixed(1)}" height="${H}" fill="rgba(255,107,107,0.12)"/>`
+: r.tail==='greater'
+? `<rect x="${critLineX.toFixed(1)}" y="0" width="${(W-critLineX).toFixed(1)}" height="${H}" fill="rgba(255,107,107,0.12)"/>`
+: `<rect x="0" y="0" width="${(W-critLineX).toFixed(1)}" height="${H}" fill="rgba(255,107,107,0.12)"/>`;
 
   const critLines = r.tail==='two'
-    ? `<line x1="${critLineX2.toFixed(1)}" y1="0" x2="${critLineX2.toFixed(1)}" y2="${H}" stroke="rgba(255,107,107,0.7)" stroke-width="1.5" stroke-dasharray="4,3"/>
-       <line x1="${(W-critLineX2).toFixed(1)}" y1="0" x2="${(W-critLineX2).toFixed(1)}" y2="${H}" stroke="rgba(255,107,107,0.7)" stroke-width="1.5" stroke-dasharray="4,3"/>`
-    : r.tail==='greater'
-    ? `<line x1="${critLineX.toFixed(1)}" y1="0" x2="${critLineX.toFixed(1)}" y2="${H}" stroke="rgba(255,107,107,0.7)" stroke-width="1.5" stroke-dasharray="4,3"/>`
-    : `<line x1="${(W-critLineX).toFixed(1)}" y1="0" x2="${(W-critLineX).toFixed(1)}" y2="${H}" stroke="rgba(255,107,107,0.7)" stroke-width="1.5" stroke-dasharray="4,3"/>`;
+? `<line x1="${critLineX2.toFixed(1)}" y1="0" x2="${critLineX2.toFixed(1)}" y2="${H}" stroke="rgba(255,107,107,0.7)" stroke-width="1.5" stroke-dasharray="4,3"/>
+   <line x1="${(W-critLineX2).toFixed(1)}" y1="0" x2="${(W-critLineX2).toFixed(1)}" y2="${H}" stroke="rgba(255,107,107,0.7)" stroke-width="1.5" stroke-dasharray="4,3"/>`
+: r.tail==='greater'
+? `<line x1="${critLineX.toFixed(1)}" y1="0" x2="${critLineX.toFixed(1)}" y2="${H}" stroke="rgba(255,107,107,0.7)" stroke-width="1.5" stroke-dasharray="4,3"/>`
+: `<line x1="${(W-critLineX).toFixed(1)}" y1="0" x2="${(W-critLineX).toFixed(1)}" y2="${H}" stroke="rgba(255,107,107,0.7)" stroke-width="1.5" stroke-dasharray="4,3"/>`;
 
   const sigCol = r.pval < r.alpha ? '#40C18D' : '#f5a623';
 
   return `<div style="margin-bottom:16px">
-    <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Distribution · ${r.tail||'two'}-tailed at α=${alpha}</div>
-    <svg width="100%" viewBox="0 0 ${W} ${H}" style="background:var(--surface2);border-radius:8px;display:block">
-      ${rejectRects}
-      <path d="${svgPts}" fill="none" stroke="rgba(108,99,255,0.6)" stroke-width="2"/>
-      ${critLines}
-      <line x1="${statX.toFixed(1)}" y1="0" x2="${statX.toFixed(1)}" y2="${H}" stroke="${sigCol}" stroke-width="2"/>
-      <text x="${Math.min(W-45,Math.max(5,statX+4))}" y="14" font-family="monospace" font-size="9" fill="${sigCol}">${label}=${r.stat.toFixed(2)}</text>
-      <text x="4" y="${H-4}" font-family="monospace" font-size="8" fill="rgba(122,120,150,0.7)">${(-range).toFixed(0)}</text>
-      <text x="${W-16}" y="${H-4}" font-family="monospace" font-size="8" fill="rgba(122,120,150,0.7)">${range.toFixed(0)}</text>
-      <text x="${(W/2-8)}" y="${H-4}" font-family="monospace" font-size="8" fill="rgba(122,120,150,0.7)">0</text>
-    </svg>
-    <div style="display:flex;gap:16px;margin-top:6px;font-family:var(--mono);font-size:10px;color:var(--dim)">
-      <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:2px;background:rgba(255,107,107,0.7)"></span>Critical region</span>
-      <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:2px;background:${sigCol}"></span>Test statistic</span>
-    </div>
+<div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Distribution · ${r.tail||'two'}-tailed at α=${alpha}</div>
+<svg width="100%" viewBox="0 0 ${W} ${H}" style="background:var(--surface2);border-radius:8px;display:block">
+  ${rejectRects}
+  <path d="${svgPts}" fill="none" stroke="rgba(108,99,255,0.6)" stroke-width="2"/>
+  ${critLines}
+  <line x1="${statX.toFixed(1)}" y1="0" x2="${statX.toFixed(1)}" y2="${H}" stroke="${sigCol}" stroke-width="2"/>
+  <text x="${Math.min(W-45,Math.max(5,statX+4))}" y="14" font-family="monospace" font-size="9" fill="${sigCol}">${label}=${r.stat.toFixed(2)}</text>
+  <text x="4" y="${H-4}" font-family="monospace" font-size="8" fill="rgba(122,120,150,0.7)">${(-range).toFixed(0)}</text>
+  <text x="${W-16}" y="${H-4}" font-family="monospace" font-size="8" fill="rgba(122,120,150,0.7)">${range.toFixed(0)}</text>
+  <text x="${(W/2-8)}" y="${H-4}" font-family="monospace" font-size="8" fill="rgba(122,120,150,0.7)">0</text>
+</svg>
+<div style="display:flex;gap:16px;margin-top:6px;font-family:var(--mono);font-size:10px;color:var(--dim)">
+  <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:2px;background:rgba(255,107,107,0.7)"></span>Critical region</span>
+  <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:2px;background:${sigCol}"></span>Test statistic</span>
+</div>
   </div>`;
 }
 
@@ -3188,12 +3195,12 @@ function renderHistory() {
   const list = document.getElementById('hyp-history-list');
   const panel = document.getElementById('hyp-history');
   list.innerHTML = hypTestHistory.slice(0,10).map((h,i)=>`
-    <div class="history-row" style="cursor:pointer" onclick="replayHistory(${i})">
-      <div class="history-badge" style="background:${h.sig?'var(--teal)':h.pval<h.result.alpha*2?'var(--amber)':'var(--dim)'}"></div>
-      <span style="font-weight:600;font-size:12px">${esc(h.test)}</span>
-      <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">p=${h.pval<0.001?'<.001':h.pval.toFixed(3)}</span>
-      <span style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-left:auto">${h.timestamp}</span>
-    </div>`).join('');
+<div class="history-row" style="cursor:pointer" onclick="replayHistory(${i})">
+  <div class="history-badge" style="background:${h.sig?'var(--teal)':h.pval<h.result.alpha*2?'var(--amber)':'var(--dim)'}"></div>
+  <span style="font-weight:600;font-size:12px">${esc(h.test)}</span>
+  <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">p=${h.pval<0.001?'<.001':h.pval.toFixed(3)}</span>
+  <span style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-left:auto">${h.timestamp}</span>
+</div>`).join('');
   panel.style.display='';
 }
 
@@ -3212,15 +3219,15 @@ function clearHypResult() {
 }
 
 
-    // Expose functions to global scope once initialized
-    window._hypReady = true;
-  };
-  if (typeof requestIdleCallback !== 'undefined') {
-    requestIdleCallback(init, { timeout: 2000 });
-  } else {
-    setTimeout(init, 100);
-  }
-})();
+}
+
+// Kick off after first paint via requestIdleCallback (or setTimeout fallback)
+if (typeof requestIdleCallback !== 'undefined') {
+  requestIdleCallback(_runHypInit, { timeout: 500 });
+} else {
+  setTimeout(_runHypInit, 50);
+}
+
 
 
 window.addEventListener('DOMContentLoaded', () => {
