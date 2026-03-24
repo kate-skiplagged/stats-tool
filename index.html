@@ -175,6 +175,22 @@ textarea:focus{border-color:var(--accent);}
 
 /* ── Shared Banner ── */
 .shared-banner {background:rgba(42,82,216,.1);border:1px solid rgba(42,82,216,.3);border-radius:8px;padding:12px 20px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;font-size:13px;}
+
+.dq-panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:18px;}
+.dq-panel.has-issues{border-color:rgba(255,107,107,.35);}
+.dq-panel.has-warnings{border-color:rgba(245,166,35,.3);}
+.dq-row{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;line-height:1.55;}
+.dq-row:last-child{border-bottom:none;}
+.dq-icon{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;margin-top:1px;}
+.dq-icon.err{background:rgba(255,107,107,.2);color:var(--red);}
+.dq-icon.warn{background:rgba(245,166,35,.15);color:var(--amber);}
+.dq-icon.info{background:rgba(0,212,168,.12);color:var(--teal);}
+.dq-msg{color:var(--text);}
+.dist-shape{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:4px;margin-left:6px;}
+.dist-normal{background:rgba(0,212,168,.1);color:var(--teal);}
+.dist-skew{background:rgba(245,166,35,.1);color:var(--amber);}
+.dist-bimodal{background:rgba(108,99,255,.1);color:var(--accent);}
+.dist-extreme{background:rgba(255,107,107,.1);color:var(--red);}
 </style>
 </head>
 <body>
@@ -592,7 +608,156 @@ const Stats = (() => {
     return {n:a.length,mean:mean(a),std:stddevPop(a),min:s[0],q1:s[Math.floor(s.length*.25)],median:s[Math.floor(s.length*.5)],q3:s[Math.floor(s.length*.75)],max:s[s.length-1]};
   }
 
-  return {mean,stddev,stddevPop,linReg,pearson,olsMultiple,seasonalIndex,anomalies,periodGrowth,detectGrain,describe,tpval};
+
+  // ── Skewness (moment-based) ───────────────────────────────────────────────
+  function skewness(a) {
+    const n=a.length, m=mean(a), s=stddevPop(a);
+    if(s===0) return 0;
+    return a.reduce((sum,v)=>sum+((v-m)/s)**3,0)/n;
+  }
+
+  // ── Kurtosis (excess, Fisher definition) ─────────────────────────────────
+  function kurtosis(a) {
+    const n=a.length, m=mean(a), s=stddevPop(a);
+    if(s===0) return 0;
+    return a.reduce((sum,v)=>sum+((v-m)/s)**4,0)/n - 3;
+  }
+
+  // ── Histogram bins (Sturges + return edges+counts) ───────────────────────
+  function histogram(a, requestedBins) {
+    const sorted=[...a].sort((x,y)=>x-y);
+    const mn=sorted[0], mx=sorted[sorted.length-1];
+    if(mn===mx) return {bins:[{lo:mn,hi:mx,count:a.length,label:mn.toFixed(1)}],min:mn,max:mx};
+    const nBins=requestedBins||Math.min(30,Math.max(5,Math.ceil(1+3.322*Math.log10(a.length))));
+    const width=(mx-mn)/nBins;
+    const counts=new Array(nBins).fill(0);
+    a.forEach(v=>{
+      let i=Math.floor((v-mn)/width);
+      if(i>=nBins) i=nBins-1;
+      counts[i]++;
+    });
+    const bins=counts.map((count,i)=>({
+      lo:mn+i*width, hi:mn+(i+1)*width,
+      count,
+      label:(mn+i*width+(width/2)).toFixed(1)
+    }));
+    return {bins,min:mn,max:mx,binWidth:width,nBins};
+  }
+
+  // ── Missing value rate per column ─────────────────────────────────────────
+  function missingRate(data, col) {
+    const total=data.length;
+    if(!total) return 0;
+    const missing=data.filter(row=>row[col]==null||row[col]===''||isNaN(parseFloat(row[col]))).length;
+    return missing/total;
+  }
+
+  // ── Coefficient of Variation ─────────────────────────────────────────────
+  function cv(a) { const m=mean(a); return m!==0?stddevPop(a)/Math.abs(m):Infinity; }
+
+  // ── Variance Inflation Factor (pairwise, simplified) ─────────────────────
+  // Returns VIF for each predictor against all others via R² of each regressed on rest
+  function vif(Xcols) {
+    if(Xcols.length<2) return Xcols.map(()=>1);
+    return Xcols.map((col,i)=>{
+      const others=Xcols.filter((_,j)=>j!==i);
+      const res=olsMultiple(others,col);
+      if(!res) return 1;
+      return res.r2>=1?Infinity:1/(1-res.r2);
+    });
+  }
+
+  // ── Time gap detector (returns gaps > 2x median interval) ────────────────
+  function timeGaps(dates) {
+    if(dates.length<3) return [];
+    const dts=dates.map(d=>new Date(d+'T00:00:00Z').getTime()).filter(t=>!isNaN(t));
+    const intervals=dts.slice(1).map((t,i)=>t-dts[i]);
+    const sorted=[...intervals].sort((a,b)=>a-b);
+    const medInterval=sorted[Math.floor(sorted.length/2)];
+    const threshold=medInterval*2.5;
+    return intervals.map((gap,i)=>({
+      after:dates[i], before:dates[i+1],
+      gap_days:Math.round(gap/86400000),
+      expected_days:Math.round(medInterval/86400000),
+      is_gap:gap>threshold
+    })).filter(g=>g.is_gap);
+  }
+
+  // ── Detect if a column is a ratio/rate (should average not sum) ──────────
+  function isRatioCol(name, values) {
+    // Name heuristics
+    if(/rate|ratio|pct|percent|margin|share|roas|roi|ctr|cvr|engagement|efficiency|density|probability|avg|average|mean|per_/i.test(name)) return true;
+    // Value range heuristic: if >80% of values fall in [0,1] it's a proportion
+    const inZeroOne=values.filter(v=>typeof v==='number'&&!isNaN(v)&&v>=0&&v<=1).length;
+    const inZeroHundred=values.filter(v=>typeof v==='number'&&!isNaN(v)&&v>=0&&v<=100).length;
+    const n=values.filter(v=>typeof v==='number'&&!isNaN(v)).length;
+    if(n>0 && inZeroOne/n>0.8) return true;
+    // If max value <=1 and min >=0 it's almost certainly a proportion
+    const nums=values.filter(v=>typeof v==='number'&&!isNaN(v));
+    if(nums.length>0 && Math.max(...nums)<=1 && Math.min(...nums)>=0) return true;
+    return false;
+  }
+
+  // ── Full data quality report ──────────────────────────────────────────────
+  function dataQuality(data, metricCol, dateCol, numCols) {
+    const issues=[];
+    const warnings=[];
+    const info=[];
+    const colMeta={};
+
+    const toNum=v=>typeof v==='number'?v:parseFloat(v);
+
+    // 1. Sample size
+    if(data.length<10) issues.push({code:'TOO_FEW_ROWS',msg:`Only ${data.length} rows — need at least 10 for meaningful analysis.`});
+    else if(data.length<30) warnings.push({code:'SMALL_SAMPLE',msg:`${data.length} rows is a small sample. Results will have wide confidence intervals.`});
+
+    // 2. Metric column checks
+    const metricVals=data.map(r=>toNum(r[metricCol])).filter(v=>!isNaN(v));
+    const missingMetric=data.length-metricVals.length;
+    if(missingMetric/data.length>0.3) issues.push({code:'HIGH_MISSING',msg:`${(missingMetric/data.length*100).toFixed(0)}% of rows missing values in "${metricCol}". Results may be misleading.`});
+    else if(missingMetric>0) warnings.push({code:'SOME_MISSING',msg:`${missingMetric} rows (${(missingMetric/data.length*100).toFixed(0)}%) have missing values in "${metricCol}" and will be skipped.`});
+
+    // 3. Zero variance / near-constant
+    if(metricVals.length>0){
+      const cvVal=cv(metricVals);
+      if(cvVal<0.001) issues.push({code:'ZERO_VARIANCE',msg:`"${metricCol}" is nearly constant (CV=${cvVal.toFixed(4)}). There is no variation to analyze.`});
+      else if(cvVal<0.05) warnings.push({code:'LOW_VARIANCE',msg:`"${metricCol}" has very low variation (CV=${cvVal.toFixed(3)}). Trend and correlation results may be unreliable.`});
+    }
+
+    // 4. Extreme outliers (z > 4)
+    if(metricVals.length>4){
+      const m=mean(metricVals), s=stddevPop(metricVals);
+      const extremes=metricVals.filter(v=>Math.abs((v-m)/s)>4);
+      if(extremes.length>0) warnings.push({code:'EXTREME_OUTLIERS',msg:`${extremes.length} extreme outlier${extremes.length>1?'s':''} detected (|z| > 4) in "${metricCol}". These may distort regression and correlation results.`});
+    }
+
+    // 5. Rate/ratio columns being summed
+    const ratioColsFound=[];
+    numCols.forEach(col=>{
+      const vals=data.map(r=>toNum(r[col])).filter(v=>!isNaN(v));
+      const isRatio=isRatioCol(col,vals);
+      colMeta[col]={isRatio,missingPct:missingRate(data,col)*100};
+      if(isRatio) ratioColsFound.push(col);
+    });
+    if(ratioColsFound.length>0) info.push({code:'RATIO_COLS_AVERAGED',msg:`${ratioColsFound.length} rate/ratio column${ratioColsFound.length>1?'s':''} detected (${ratioColsFound.slice(0,3).join(', ')}${ratioColsFound.length>3?'…':''}). These will be averaged instead of summed during aggregation.`,cols:ratioColsFound});
+
+    // 6. Predictor collinearity check (if we have multiple metrics)
+    if(numCols.length>=2 && metricVals.length>=10){
+      const predVals=numCols.slice(0,5).map(c=>data.map(r=>toNum(r[c])).filter(v=>!isNaN(v)));
+      // Only check if all same length
+      if(predVals.every(v=>v.length===predVals[0].length)&&predVals[0].length>=10){
+        try {
+          const vifs=vif(predVals);
+          const highVIF=numCols.slice(0,5).filter((_,i)=>vifs[i]>10);
+          if(highVIF.length>0) warnings.push({code:'MULTICOLLINEARITY',msg:`High multicollinearity detected in: ${highVIF.join(', ')} (VIF > 10). OLS coefficients for these predictors will be unreliable and may be excluded.`});
+        } catch(e) {}
+      }
+    }
+
+    return {issues,warnings,info,colMeta,ok:issues.length===0};
+  }
+
+  return {mean,stddev,stddevPop,linReg,pearson,olsMultiple,seasonalIndex,anomalies,periodGrowth,detectGrain,describe,skewness,kurtosis,histogram,cv,vif,timeGaps,isRatioCol,dataQuality,tpval};
 })();
 
 
@@ -639,12 +804,45 @@ function inferCols(data,fields){
     if(yyyymmdd.length/vals.length>.7) type='date';
     else if(nums.length/vals.length>.7) type='numeric';
     else if(dts.length/vals.length>.5) type='date';
+
+    // Dim detection: id/label/categorical columns
+    const DIM_PATTERN = /^(id|key|code|name|label|group|channel|platform|category|segment|type|source|medium|campaign|device|region|country|market|audience|cohort|tier|bucket|brand|product|sku|vendor|partner|property|app|site|placement|creative|ad_|utm_)/i;
+    // Rate detection for auto-labeling
+    const numVals=nums.map(v=>v);
+    const isRate=Stats.isRatioCol(f,numVals);
+
     let role='metric';
     if(type==='date') role='date';
-    else if(/^(id|key|code|name|label|group|channel|category|segment|type|source|medium|campaign|device|region|country)/i.test(f)) role='dim';
+    else if(DIM_PATTERN.test(f)) role='dim';
     else if(type==='text') role='dim';
-    return {name:f,type,sample:vals[0],role};
+    // Text columns with low cardinality are also dims (e.g. "Blog", "Referral")
+    else if(type==='text'){
+      const unique=new Set(vals.map(v=>String(v)));
+      if(unique.size<vals.length*0.5) role='dim';
+    }
+
+    return {name:f,type,sample:vals[0],role,isRate};
   });
+}
+
+// Determine best display label for the dimension column (generalize "channel")
+function getDimLabel(colName){
+  if(!colName) return 'Segment';
+  const n=colName.toLowerCase();
+  if(n.includes('channel')) return 'Channel';
+  if(n.includes('platform')) return 'Platform';
+  if(n.includes('source')) return 'Source';
+  if(n.includes('medium')) return 'Medium';
+  if(n.includes('campaign')) return 'Campaign';
+  if(n.includes('device')) return 'Device';
+  if(n.includes('region')||n.includes('country')||n.includes('market')) return 'Region';
+  if(n.includes('product')||n.includes('sku')) return 'Product';
+  if(n.includes('cohort')) return 'Cohort';
+  if(n.includes('tier')) return 'Tier';
+  if(n.includes('audience')) return 'Audience';
+  // Fallback: Title-case the column name (strip underscores/camelCase)
+  return colName.replace(/[_-]/g,' ').replace(/([A-Z])/g,' $1').trim()
+    .split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
 }
 
 function showSchema(filename,rows){
@@ -695,7 +893,7 @@ async function runAnalysis(){
   if(!parsedData||!parsedData.length){alert('Upload a dataset first.');return;}
   show('sec-run');
 
-  const steps=['Detecting data structure','Aggregating to series','Computing trend & regression','Calculating seasonality','Running correlation analysis','Generating narrative via Claude AI'];
+  const steps=['Validating data quality','Detecting structure & aggregating','Computing trend & regression','Calculating seasonality & distribution','Running correlations','Generating narrative via Claude AI'];
   const prog=document.getElementById('prog-list');
   prog.innerHTML=steps.map((s,i)=>`<div class="prog-item" id="pi${i}"><div class="prog-dot"></div>${s}</div>`).join('');
   let si=0;
@@ -716,6 +914,13 @@ async function runAnalysis(){
     const numCols=metricCols.filter(c=>c!==metricCol);
 
     const toNum=v=>typeof v==='number'?v:parseFloat(v);
+
+    // ── Data quality check ────────────────────────────────────────────────
+    const dqReport = Stats.dataQuality(parsedData, metricCol, dateCol, numCols);
+    // Block on hard errors
+    if(!dqReport.ok){
+      throw new Error('Data quality issue: ' + dqReport.issues.map(i=>i.msg).join(' | '));
+    }
 
     await sleep(500); adv();
 
@@ -743,14 +948,49 @@ async function runAnalysis(){
 
       const bucketMetric={}, bucketCols={};
       numCols.forEach(c=>{ bucketCols[c]={}; });
+      // Mark which cols are ratios (need averaging not summing)
+      const ratioColSet = new Set(
+        [...metricCols, ...numCols].filter(c => {
+          const colDef = detectedCols.find(dc=>dc.name===c);
+          if(colDef?.isRate) return true;
+          const vals = parsedData.slice(0,50).map(r=>toNum(r[c])).filter(v=>!isNaN(v));
+          return Stats.isRatioCol(c, vals);
+        })
+      );
+      // For ratio cols we need sum of (value*weight) and sum of weights to compute weighted avg
+      const bucketRatioCounts={};
+      numCols.forEach(c=>{ if(ratioColSet.has(c)) bucketRatioCounts[c]={}; });
+      const metricIsRatio = ratioColSet.has(metricCol);
+      const bucketMetricCount={};
+
       parsedData.forEach(row=>{
         const bk=bucketKey(row[dateCol]);
         if(!bk) return;
         const v=toNum(row[metricCol]);
         if(isNaN(v)) return;
         bucketMetric[bk]=(bucketMetric[bk]||0)+v;
-        numCols.forEach(c=>{ const cv=toNum(row[c]); if(!isNaN(cv)) bucketCols[c][bk]=(bucketCols[c][bk]||0)+cv; });
+        if(metricIsRatio) bucketMetricCount[bk]=(bucketMetricCount[bk]||0)+1;
+        numCols.forEach(c=>{
+          const cv=toNum(row[c]);
+          if(!isNaN(cv)){
+            bucketCols[c][bk]=(bucketCols[c][bk]||0)+cv;
+            if(ratioColSet.has(c)) bucketRatioCounts[c][bk]=(bucketRatioCounts[c][bk]||0)+1;
+          }
+        });
       });
+      // Convert ratio col sums to averages
+      numCols.forEach(c=>{
+        if(ratioColSet.has(c)){
+          Object.keys(bucketCols[c]).forEach(bk=>{
+            if(bucketRatioCounts[c][bk]>0) bucketCols[c][bk]/=bucketRatioCounts[c][bk];
+          });
+        }
+      });
+      if(metricIsRatio){
+        Object.keys(bucketMetric).forEach(bk=>{
+          if(bucketMetricCount[bk]>0) bucketMetric[bk]/=bucketMetricCount[bk];
+        });
+      }
 
       dates=Object.keys(bucketMetric).sort();
       if(dates.length<3) throw new Error(`Not enough distinct ${grain} periods (need 3+). Found: ${dates.length}`);
@@ -761,6 +1001,15 @@ async function runAnalysis(){
 
     } else {
       grain='unknown';
+      // Define ratioColSet for no-date path too
+      const ratioColSet = new Set(
+        [...metricCols, ...numCols].filter(c => {
+          const colDef = detectedCols.find(dc=>dc.name===c);
+          if(colDef?.isRate) return true;
+          const vals = parsedData.slice(0,50).map(r=>toNum(r[c])).filter(v=>!isNaN(v));
+          return Stats.isRatioCol(c, vals);
+        })
+      );
       const completeIdx=parsedData.map((_,i)=>i).filter(i=>!isNaN(toNum(parsedData[i][metricCol])));
       if(completeIdx.length<3) throw new Error('Not enough valid rows (need at least 3).');
       Y=completeIdx.map(i=>toNum(parsedData[i][metricCol]));
@@ -775,7 +1024,8 @@ async function runAnalysis(){
     let channel_breakdown = null;
     if (ctx.goal === 'channels') {
       const dimCols = detectedCols.filter(c => c.role === 'dim').map(c => c.name);
-      let targetDim = dimCols.find(c => /channel|source|medium|campaign/i.test(c)) || dimCols[0];
+      // Pick the best dimension column — prefer explicitly segmenting cols
+      let targetDim = dimCols.find(c => /channel|platform|source|medium|campaign|device|segment|cohort|audience/i.test(c)) || dimCols[0];
       
       if (targetDim) {
         const chTotals = {};
@@ -919,6 +1169,24 @@ async function runAnalysis(){
     const period_data=dateCol?Stats.periodGrowth(dates,Y,compMode,grain):[];
     const yoy_data=period_data; 
     const desc=Stats.describe(Y);
+    const skew=Stats.skewness(Y);
+    const kurt=Stats.kurtosis(Y);
+    const hist=Stats.histogram(Y);
+    const gaps=dateCol?Stats.timeGaps(dates):[];
+    // Per-metric-col descriptive stats (all marked metric cols, not just primary)
+    const allMetricDesc = {};
+    metricCols.forEach(col=>{
+      const colVals = col===metricCol ? Y : (window._aggCols[col]||[]);
+      if(colVals.length>0){
+        allMetricDesc[col]={
+          desc:Stats.describe(colVals),
+          skewness:Stats.skewness(colVals),
+          kurtosis:Stats.kurtosis(colVals),
+          hist:Stats.histogram(colVals),
+          isRatio:(typeof ratioColSet!=='undefined'&&ratioColSet?.has(col))||false
+        };
+      }
+    });
 
     await sleep(500); adv(); await sleep(400); adv();
 
@@ -934,7 +1202,20 @@ async function runAnalysis(){
       correlations:pearsonPairs.slice(0,4).map(p=>({name:p.name,r:+((p.r??0).toFixed(4)),p:+((p.p??1).toFixed(5))})),
       ols:ols?{r2:+ols.r2.toFixed(4),adj_r2:+ols.adjR2.toFixed(4),predictors:olsNames.map((name,i)=>({name:name,coeff:+(ols.coeffs[i+1]??0).toFixed(4),p_value:+(ols.pvals[i+1]??1).toFixed(5)}))}:null,
       anomalies:anom.outliers.map(o=>({date:o.date,value:+o.value.toFixed(0),z:o.z,direction:o.direction})),
-      stats:{mean:+((desc.mean??0).toFixed(2)),std:+((desc.std??0).toFixed(2)),min:+((desc.min??0).toFixed(2)),max:+((desc.max??0).toFixed(2))},
+      stats:{
+        mean:+((desc.mean??0).toFixed(2)),std:+((desc.std??0).toFixed(2)),
+        min:+((desc.min??0).toFixed(2)),max:+((desc.max??0).toFixed(2)),
+        median:+((desc.median??0).toFixed(2)),q1:+((desc.q1??0).toFixed(2)),q3:+((desc.q3??0).toFixed(2)),
+        n:desc.n,
+        skewness:+(skew.toFixed(3)),kurtosis:+(kurt.toFixed(3)),
+        normality_label:Math.abs(skew)<0.5&&Math.abs(kurt)<1?'roughly normal':Math.abs(skew)>1?'highly skewed':'moderately skewed'
+      },
+      data_quality:{
+        warnings:dqReport.warnings.map(w=>w.msg),
+        info:dqReport.info.map(i=>i.msg),
+        ratio_cols:dqReport.info.find(i=>i.code==='RATIO_COLS_AVERAGED')?.cols||[],
+        time_gaps:gaps.map(g=>({after:g.after,before:g.before,gap_days:g.gap_days}))
+      },
       yoy:yoy_data.slice(-8).map(y=>({date:y.date,pct:+((y.pct??y.yoy??0).toFixed(2))})),
       goal:ctx.goal||'general',
       channel_breakdown: channel_breakdown ? {
@@ -953,7 +1234,7 @@ async function runAnalysis(){
     const narrative=await callClaude(statsPayload);
     await sleep(300);
 
-    const fullPayload = {stats:statsPayload,narrative,Y,dates,T,trend,si_data,dow_data,pearsonPairs,ols,olsNames,anom,yoy_data,channel_breakdown,metricCol,desc,dateCol,grain,compMode};
+    const fullPayload = {stats:statsPayload,narrative,Y,dates,T,trend,si_data,dow_data,pearsonPairs,ols,olsNames,anom,yoy_data,channel_breakdown,metricCol,desc,dateCol,grain,compMode,skew,kurt,hist,gaps,allMetricDesc,dqReport};
     lastRunPayload = fullPayload; 
     renderResults(fullPayload);
 
@@ -1026,6 +1307,16 @@ Use this exact JSON structure:
       "id": "yoy",
       "plain_english": "2-3 sentences about year-over-year trajectory with specific percentages.",
       "what_now": "One concrete action."
+    },
+    {
+      "id": "descriptive",
+      "plain_english": "2-3 sentences interpreting the distribution shape (skewness=${statsPayload.stats?.skewness}, normality=${statsPayload.stats?.normality_label}). Call out if mean vs median diverge significantly. Note if this affects interpretation of other stats.",
+      "what_now": "One concrete action based on the distribution shape."
+    },
+    {
+      "id": "data_quality",
+      "plain_english": "${statsPayload.data_quality?.warnings?.length>0?'2-3 sentences flagging the most important data quality issues found and their practical implications.':'The data passed all quality checks. Note what this means for confidence in the findings.'}",
+      "what_now": "One concrete action to address data quality or validate findings."
     }
     ${statsPayload.goal === 'channels' && statsPayload.channel_breakdown ? `,
     {
@@ -1097,9 +1388,16 @@ Use this exact JSON structure:
 }
 
 const chartRegistry=[];
-function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearsonPairs,ols,olsNames,anom,yoy_data,channel_breakdown,metricCol,desc,dateCol,grain,compMode, isShared}){
+function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearsonPairs,ols,olsNames,anom,yoy_data,channel_breakdown,metricCol,desc,dateCol,grain,compMode,isShared,skew,kurt,hist,gaps,allMetricDesc,dqReport}){
   chartRegistry.forEach(c=>c.destroy()); chartRegistry.length=0;
   try {
+  // Safe defaults so shared links & older payloads never crash new render code
+  skew = skew ?? null;
+  kurt = kurt ?? null;
+  hist = hist ?? null;
+  gaps = gaps ?? [];
+  allMetricDesc = allMetricDesc ?? {};
+  dqReport = dqReport ?? null;
   const mods=narrative.modules||[];
   const getText=(id,field)=>{const m=mods.find(x=>x.id===id);return m?m[field]||'':'';}
 
@@ -1288,7 +1586,7 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearson
     <div class="mod-card" id="mc-channels">
       <div class="mod-head">
         <div class="mod-ic">⑆</div>
-        <div><div class="mod-title">Acquisition Mix</div><div class="mod-subtitle">Split by ${esc(channel_breakdown.dimension_name)}</div></div>
+        <div><div class="mod-title">${getDimLabel(channel_breakdown?.dimension_name||'')} Mix</div><div class="mod-subtitle">Split by ${esc(getDimLabel(channel_breakdown.dimension_name))}</div></div>
       </div>
       <div class="mod-body">
         <div class="stats-row">
@@ -1327,7 +1625,7 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearson
       <div class="mod-card" id="mc-channel-growth">
         <div class="mod-head">
           <div class="mod-ic">⚡</div>
-          <div><div class="mod-title">Channel Momentum</div><div class="mod-subtitle">Fastest growing vs. steepest declining</div></div>
+          <div><div class="mod-title">${getDimLabel(channel_breakdown?.dimension_name||'')} Momentum</div><div class="mod-subtitle">Fastest growing vs. steepest declining</div></div>
         </div>
         <div class="mod-body">
           <div class="plain-box"><div class="plain-lbl">Momentum Insights</div><div class="plain-txt">${esc(chGrowthMod.plain_english)}</div></div>
@@ -1361,6 +1659,110 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearson
     }
   }
 
+
+  // ── Data quality panel ───────────────────────────────────────────────────
+  let dqHTML = '';
+  if(dqReport && (dqReport.warnings.length>0||dqReport.info.length>0)){
+    const allItems=[
+      ...dqReport.warnings.map(w=>({...w,sev:'warn'})),
+      ...dqReport.info.map(i=>({...i,sev:'info'})),
+    ];
+    dqHTML=`<div class="dq-panel ${dqReport.warnings.length>0?'has-warnings':''}">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--dim);text-transform:uppercase;margin-bottom:12px">
+        Data quality ${dqReport.warnings.length>0?'&#9888; '+dqReport.warnings.length+' warning'+(dqReport.warnings.length>1?'s':''):'&#10003; clean'}
+      </div>
+      ${allItems.map(item=>`<div class="dq-row">
+        <div class="dq-icon ${item.sev}">${item.sev==='warn'?'!':'i'}</div>
+        <div><div class="dq-msg">${esc(item.msg)}</div></div>
+      </div>`).join('')}
+      ${gaps&&gaps.length>0?`<div class="dq-row">
+        <div class="dq-icon warn">!</div>
+        <div class="dq-msg">${gaps.length} time gap${gaps.length>1?'s':''} detected: ${gaps.slice(0,3).map(g=>`${esc(g.after)}→${esc(g.before)} (${g.gap_days}d)`).join(', ')}${gaps.length>3?'…':''}. Period-over-period comparisons across gaps may be misleading.</div>
+      </div>`:''}
+    </div>`;
+  }
+
+  // ── Descriptive statistics module ─────────────────────────────────────────
+  const skewLabel = skew==null?'':Math.abs(skew)<0.5?'roughly normal':skew>1?'right-skewed':skew<-1?'left-skewed':skew>0?'mildly right-skewed':'mildly left-skewed';
+  const skewClass = Math.abs(skew??0)<0.5?'dist-normal':Math.abs(skew??0)>1?'dist-extreme':'dist-skew';
+  const kurtLabel = kurt==null?'':(kurt>3?'heavy-tailed':kurt<-1?'flat':'normal tails');
+
+  // Build per-col histogram rows for all metric cols
+  const descColsHTML = Object.entries(allMetricDesc||{}).map(([col, cd])=>{
+    if(!cd||!cd.hist||!cd.hist.bins) return '';
+    const bins = cd.hist.bins;
+    const maxCount = Math.max(...bins.map(b=>b.count),1);
+    const colMean = cd.desc.mean;
+    const colStd = cd.desc.std;
+    const colSkew = cd.skewness;
+    const colSkewLabel = Math.abs(colSkew)<0.5?'normal':colSkew>1?'right-skewed':colSkew<-1?'left-skewed':colSkew>0?'mild right':' mild left';
+    const colSkewClass = Math.abs(colSkew)<0.5?'dist-normal':Math.abs(colSkew)>1?'dist-extreme':'dist-skew';
+    const isRatioLabel = cd.isRatio?'<span style="font-family:var(--mono);font-size:9px;color:var(--amber);background:rgba(245,166,35,.1);padding:1px 6px;border-radius:3px;margin-left:6px">averaged</span>':'';
+    return `<div style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${esc(col)}${isRatioLabel}</span>
+        <span class="dist-shape ${colSkewClass}">${colSkewLabel}</span>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:2px;height:60px">
+        ${bins.map(b=>{
+          const h=Math.round((b.count/maxCount)*56)+2;
+          const withinStd=Math.abs((b.lo+b.hi)/2-colMean)<=colStd;
+          const color=withinStd?'rgba(64,193,141,0.7)':'rgba(245,166,35,0.5)';
+          return `<div title="${b.count} obs (${b.lo.toFixed(1)}–${b.hi.toFixed(1)})" style="flex:1;height:${h}px;background:${color};border-radius:2px 2px 0 0;min-width:4px"></div>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--dim);margin-top:4px">
+        <span>${fmt(cd.desc.min)}</span>
+        <span>mean ${fmt(cd.desc.mean)} · med ${fmt(cd.desc.median)}</span>
+        <span>${fmt(cd.desc.max)}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  const descHTML=`
+    <div class="mod-card">
+      <div class="mod-head">
+        <div class="mod-ic">∑</div>
+        <div>
+          <div class="mod-title">Descriptive statistics</div>
+          <div class="mod-subtitle">Distribution shape, central tendency, spread</div>
+        </div>
+      </div>
+      <div class="mod-body">
+        <div class="stats-row">
+          <div class="stat-c"><div class="stat-lbl">Mean</div><div class="stat-val neu">${fmt(desc.mean)}</div></div>
+          <div class="stat-c"><div class="stat-lbl">Median</div><div class="stat-val neu">${fmt(desc.median)}</div></div>
+          <div class="stat-c"><div class="stat-lbl">Std dev</div><div class="stat-val neu">${fmt(desc.std)}</div></div>
+          <div class="stat-c"><div class="stat-lbl">Skewness</div>
+            <div class="stat-val ${Math.abs(skew??0)<0.5?'pos':Math.abs(skew??0)>1?'neg':'warn'}" style="font-size:15px">
+              ${skew!=null?(skew>0?'+':'')+skew.toFixed(2):'—'}
+              <span class="dist-shape ${skewClass}" style="font-size:9px">${skewLabel}</span>
+            </div>
+          </div>
+        </div>
+        <div class="stats-row">
+          <div class="stat-c"><div class="stat-lbl">Min</div><div class="stat-val neu">${fmt(desc.min)}</div></div>
+          <div class="stat-c"><div class="stat-lbl">Q1</div><div class="stat-val neu">${fmt(desc.q1)}</div></div>
+          <div class="stat-c"><div class="stat-lbl">Q3</div><div class="stat-val neu">${fmt(desc.q3)}</div></div>
+          <div class="stat-c"><div class="stat-lbl">Max</div><div class="stat-val neu">${fmt(desc.max)}</div></div>
+        </div>
+        ${Math.abs(desc.mean-desc.median)>desc.std*0.5?`<div style="background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.2);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--text)">
+          Mean (${fmt(desc.mean)}) and median (${fmt(desc.median)}) diverge by more than half a std dev — the distribution is skewed. Median is a more reliable central tendency estimate for this data.
+        </div>`:''}
+        ${descColsHTML?`<div style="border-top:1px solid var(--border);margin-top:4px;padding-top:16px">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px">Distribution per metric column</div>
+          ${descColsHTML}
+          <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:8px">Green bars = within 1 std dev of mean · Amber bars = in tails · Averaged columns use mean per period</div>
+        </div>`:''}
+        <div class="tech-row">
+          <span class="tech-tag">Sturges binning</span>
+          <span class="tech-tag">n=${desc.n}</span>
+          <span class="tech-tag">CV=${desc.std&&desc.mean?(desc.std/Math.abs(desc.mean)*100).toFixed(1)+'%':'—'}</span>
+          <span class="tech-tag">kurtosis ${kurt!=null?(kurt>0?'+':'')+kurt.toFixed(2):'—'} (${kurtLabel})</span>
+        </div>
+      </div>
+    </div>`;
+
   const container=document.getElementById('results-container');
   const sharedBanner = isShared ? `<div class="shared-banner no-print"><span>You are viewing a shared analysis. Data is read-only.</span><button class="btn btn-g" style="padding: 4px 10px; font-size: 11px;" onclick="window.location.hash=''; window.location.reload();">Run New Analysis</button></div>` : '';
 
@@ -1374,7 +1776,7 @@ function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearson
         <span>Local stats + Claude narrative</span>
       </div>
     </div>
-    ${channelsHTML}${channelGrowthHTML}${trendHTML}${seasonHTML}${corrHTML}${anomHTML}${yoyHTML}`;
+    ${dqHTML}${descHTML}${channelsHTML}${channelGrowthHTML}${trendHTML}${seasonHTML}${corrHTML}${anomHTML}${yoyHTML}`;
 
   if(isShared) {
     document.getElementById('sec-upload').classList.add('hidden');
@@ -1511,7 +1913,7 @@ function generateShareLink() {
       stats: st.stats,
       metricCol: st.metricCol,
       desc: st.desc,
-      dates: st.dates.slice(-50), 
+      dates: st.dates.slice(-50),
       Y: st.Y.slice(-50),
       T: st.T.slice(-50),
       trend: { slope: st.trend.slope, intercept: st.trend.intercept, r2: st.trend.r2, pval: st.trend.pval },
@@ -1521,10 +1923,28 @@ function generateShareLink() {
       ols: st.ols ? {r2: st.ols.r2, adjR2: st.ols.adjR2} : null,
       olsNames: st.olsNames,
       anom: { lo: st.anom.lo, hi: st.anom.hi, outliers: recentAnomalies },
-      yoy_data: st.yoy_data.slice(-10), 
+      yoy_data: st.yoy_data.slice(-10),
       channel_breakdown: chBreakdownMini,
       grain: st.grain,
-      compMode: st.compMode
+      compMode: st.compMode,
+      // New fields for descriptive + DQ modules
+      skew: st.skew,
+      kurt: st.kurt,
+      // Histogram: keep counts + labels only (no raw bin edges to save space)
+      hist: st.hist ? { bins: st.hist.bins.map(b=>({count:b.count,label:b.label,lo:b.lo,hi:b.hi})), min:st.hist.min, max:st.hist.max, nBins:st.hist.nBins } : null,
+      gaps: st.gaps || [],
+      // allMetricDesc: full hist per col is large — keep only summary stats
+      allMetricDesc: st.allMetricDesc ? Object.fromEntries(
+        Object.entries(st.allMetricDesc).map(([col,cd]) => [col, {
+          desc: cd.desc,
+          skewness: cd.skewness,
+          kurtosis: cd.kurtosis,
+          isRatio: cd.isRatio,
+          // Compact histogram: just counts for the bar heights
+          hist: cd.hist ? { bins: cd.hist.bins.map(b=>({count:b.count,label:b.label,lo:b.lo,hi:b.hi})), min:cd.hist.min, max:cd.hist.max, nBins:cd.hist.nBins } : null
+        }])
+      ) : {},
+      dqReport: st.dqReport ? { warnings: st.dqReport.warnings, info: st.dqReport.info, ok: st.dqReport.ok } : null
     };
 
     const encoded = LZString.compressToEncodedURIComponent(JSON.stringify(mini));
@@ -1616,15 +2036,22 @@ window.addEventListener('DOMContentLoaded', () => {
   if (window.location.hash.startsWith('#s=')) {
     try {
       const decodedStr = LZString.decompressFromEncodedURIComponent(window.location.hash.substring(3));
-      const sharedPayload = JSON.parse(decodedStr);
-      renderResults(sharedPayload);
+      const sp = JSON.parse(decodedStr);
+      // Ensure new fields have safe defaults so shared links from older encodes still work
+      sp.skew = sp.skew ?? null;
+      sp.kurt = sp.kurt ?? null;
+      sp.hist = sp.hist ?? null;
+      sp.gaps = sp.gaps ?? [];
+      sp.allMetricDesc = sp.allMetricDesc ?? {};
+      sp.dqReport = sp.dqReport ?? null;
+      renderResults(sp);
     } catch(e) {
       console.error('Failed to load shared payload', e);
-      window.location.hash = ''; 
+      window.location.hash = '';
     }
   }
 });
 
 </script>
 </body>
-</html>
+</html> 
