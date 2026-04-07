@@ -1446,6 +1446,34 @@ async function runAnalysis(){
       mom: Stats.periodGrowth(dates, Y, 'mom', grain),
       wow: Stats.periodGrowth(dates, Y, 'wow', grain)
     } : null;
+
+    // Cross-sectional high vs low comparison for "What's changed?" (non-time or supplement)
+    let cross_section = null;
+    if (ctx.goal === 'pop') {
+      const n = Y.length;
+      const q = Math.floor(n / 4);
+      if (q >= 5 && numCols.length > 1) {
+        const sortedByMetric = [...Array(n).keys()].sort((a,b) => Y[a] - Y[b]);
+        const bottomQ = sortedByMetric.slice(0, q);
+        const topQ    = sortedByMetric.slice(-q);
+        const comparisons = [];
+        numCols.filter(c => c !== metricCol).forEach(col => {
+          const colVals = window._aggCols[col] || [];
+          if (!colVals.length) return;
+          const bMean = bottomQ.reduce((s,i) => s + (colVals[i]||0), 0) / q;
+          const tMean = topQ.reduce((s,i)    => s + (colVals[i]||0), 0) / q;
+          const diffPct = Math.abs(bMean) > 0.0001 ? (tMean - bMean) / Math.abs(bMean) * 100 : null;
+          comparisons.push({ col, topMean: tMean, bottomMean: bMean, diffPct });
+        });
+        comparisons.sort((a,b) => Math.abs(b.diffPct??0) - Math.abs(a.diffPct??0));
+        cross_section = {
+          comparisons: comparisons.slice(0, 10),
+          q,
+          topMetricMean:    topQ.reduce((s,i)    => s + Y[i], 0) / q,
+          bottomMetricMean: bottomQ.reduce((s,i) => s + Y[i], 0) / q,
+        };
+      }
+    }
     const desc=Stats.describe(Y);
     const skew=Stats.skewness(Y);
     const kurt=Stats.kurtosis(Y);
@@ -1512,7 +1540,7 @@ async function runAnalysis(){
     const narrative=await callClaude(statsPayload);
     await sleep(300);
 
-    const fullPayload = {stats:statsPayload,narrative,Y,dates,T,trend,si_data,dow_data,pearsonPairs,ols,olsNames,anom,yoy_data,pop_grains,channel_breakdown,metricCol,desc,dateCol,grain,compMode,skew,kurt,hist,gaps,allMetricDesc,dqReport};
+    const fullPayload = {stats:statsPayload,narrative,Y,dates,T,trend,si_data,dow_data,pearsonPairs,ols,olsNames,anom,yoy_data,pop_grains,cross_section,channel_breakdown,metricCol,desc,dateCol,grain,compMode,skew,kurt,hist,gaps,allMetricDesc,dqReport};
     lastRunPayload = fullPayload; 
     renderResults(fullPayload);
 
@@ -1666,7 +1694,7 @@ Use this exact JSON structure:
 }
 
 const chartRegistry=[];
-async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearsonPairs,ols,olsNames,anom,yoy_data,pop_grains,channel_breakdown,metricCol,desc,dateCol,grain,compMode,skew,kurt,hist,gaps,allMetricDesc,dqReport}){
+async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,pearsonPairs,ols,olsNames,anom,yoy_data,pop_grains,cross_section,channel_breakdown,metricCol,desc,dateCol,grain,compMode,skew,kurt,hist,gaps,allMetricDesc,dqReport}){
   chartRegistry.forEach(c=>c.destroy()); chartRegistry.length=0;
   const yieldFrame = () => new Promise(r => setTimeout(r, 0));
   try {
@@ -2135,6 +2163,61 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
       </div>
     </div>`;
 
+  // ── Cross-sectional high vs low module ───────────────────────────────────
+  let crossSectionHTML = '';
+  if (cross_section && cross_section.comparisons.length > 0) {
+    const { comparisons, q, topMetricMean, bottomMetricMean } = cross_section;
+    const overallLift = bottomMetricMean > 0 ? (topMetricMean - bottomMetricMean) / bottomMetricMean * 100 : null;
+    const maxAbsDiff = Math.max(...comparisons.map(c => Math.abs(c.diffPct ?? 0)), 1);
+
+    crossSectionHTML = `
+    <div class="mod-card" id="mc-cross-section">
+      <div class="mod-head">
+        <div class="mod-ic">↕</div>
+        <div>
+          <div class="mod-title">High vs low — cross-sectional split</div>
+          <div class="mod-subtitle">Top 25% vs bottom 25% of records by ${esc(metricCol)} · n=${q} per group</div>
+        </div>
+      </div>
+      <div class="mod-body">
+        <div class="stats-row" style="margin-bottom:20px">
+          <div class="stat-c">
+            <div class="stat-lbl">Top 25% avg ${esc(metricCol)}</div>
+            <div class="stat-val pos">${fmt(topMetricMean)}</div>
+          </div>
+          <div class="stat-c">
+            <div class="stat-lbl">Bottom 25% avg ${esc(metricCol)}</div>
+            <div class="stat-val neg">${fmt(bottomMetricMean)}</div>
+          </div>
+          ${overallLift != null ? `<div class="stat-c">
+            <div class="stat-lbl">Spread</div>
+            <div class="stat-val ${overallLift>0?'pos':'neg'}">${overallLift>0?'+':''}${overallLift.toFixed(0)}%</div>
+          </div>` : ''}
+        </div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">
+          What's different between high and low ${esc(metricCol)} records?
+        </div>
+        ${comparisons.map(c => {
+          const d = c.diffPct;
+          if (d == null) return '';
+          const barW = Math.abs(d) / maxAbsDiff * 100;
+          const color = d > 0 ? 'var(--teal)' : 'var(--red)';
+          const sigColor = Math.abs(d) > 20 ? color : 'var(--dim)';
+          return `<div class="driver-row" style="grid-template-columns:160px 1fr 70px 90px">
+            <span class="d-lbl">${esc(c.col)}</span>
+            <div class="bar-w"><div class="bar-f" style="width:${barW}%;background:${color}"></div></div>
+            <span class="d-val" style="color:${sigColor}">${d>0?'+':''}${d.toFixed(1)}%</span>
+            <span class="d-sig" style="font-size:9px;color:var(--dim)">${fmt(c.topMean)} vs ${fmt(c.bottomMean)}</span>
+          </div>`;
+        }).join('')}
+        <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+          Bars show % difference in column mean between the top and bottom ${esc(metricCol)} quartiles. Larger bars = stronger association.
+        </div>
+        <div class="tech-row"><span class="tech-tag">Quartile split</span><span class="tech-tag">n=${q} per group</span><span class="tech-tag">sorted by |Δ%|</span></div>
+      </div>
+    </div>`;
+  }
+
   const container=document.getElementById('results-container');
 
   container.innerHTML=`
@@ -2146,7 +2229,7 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
         <span>Local stats + Claude narrative</span>
       </div>
     </div>
-    ${dqHTML}${descHTML}${channelsHTML}${channelGrowthHTML}${trendHTML}${seasonHTML}${corrHTML}${anomHTML}${yoyHTML}${popAllGrainsHTML}`;
+    ${dqHTML}${descHTML}${channelsHTML}${channelGrowthHTML}${trendHTML}${seasonHTML}${corrHTML}${anomHTML}${yoyHTML}${popAllGrainsHTML}${crossSectionHTML}`;
 
   show('sec-results');
 
