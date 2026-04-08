@@ -263,8 +263,8 @@ textarea:focus{border-color:var(--accent);}
 <div id="key-banner" class="no-print">
   <div class="key-icon" id="key-icon">&#128273;</div>
   <div class="key-info">
-    <div class="key-title" id="key-title">Anthropic API key required for AI narratives</div>
-    <div class="key-sub" id="key-sub">Stats run locally &#8212; key is only used to generate plain-English explanations. Saved to your browser only, never transmitted anywhere else.</div>
+    <div class="key-title" id="key-title">Add an Anthropic key for AI-generated insights <span style="font-weight:400;color:var(--dim)">(optional)</span></div>
+    <div class="key-sub" id="key-sub">Stats always run locally — key is only used to generate plain-English explanations for each module. Saved to your browser only, never transmitted anywhere else.</div>
   </div>
   <div id="key-input-row" class="key-input-row">
     <input type="password" id="key-input" placeholder="sk-ant-api03-..." autocomplete="off" onkeydown="if(event.key==='Enter')saveKey()">
@@ -353,6 +353,16 @@ textarea:focus{border-color:var(--accent);}
     <div class="q-block" style="margin-top:14px">
       <div class="q-label">Focus window or segment? <span style="color:var(--dim);font-weight:400">(optional)</span></div>
       <textarea id="focus-inp" rows="2" placeholder="e.g. 'last 4 weeks', 'US only', 'post-launch vs pre-launch'"></textarea>
+    </div>
+    <div class="q-block" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <div class="q-label">Data preprocessing</div>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-top:6px">
+        <input type="checkbox" id="winsorize-toggle" onchange="ctx.winsorize=this.checked" style="width:15px;height:15px;margin-top:2px;accent-color:var(--accent);flex-shrink:0">
+        <div>
+          <div style="font-size:13px;font-weight:600">Winsorize before analysis</div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:3px">Cap top &amp; bottom 5% of values before running regression and correlations — improves stability on skewed or outlier-heavy data</div>
+        </div>
+      </label>
     </div>
     
     <div class="q-block" style="margin-top:14px; background:var(--surface2); padding:12px 14px; border-radius:8px; border:1px solid var(--bb);">
@@ -806,12 +816,18 @@ const Stats = (() => {
     const q3=sorted[Math.floor(sorted.length*0.75)];
     const iqr=q3-q1, lo=q1-1.5*iqr, hi=q3+1.5*iqr;
     const m=mean(values), s=stddevPop(values);
+    // Robust: MAD-based z-score (handles skewed distributions better)
+    const med=median(values);
+    const madVal=mad(values);
+    const useRobust=madVal>0;
     const out=values.map((v,i)=>{
       const z=(v-m)/s;
-      const isOut=v<lo||v>hi||Math.abs(z)>zThresh;
-      return {date:dates[i],value:v,z:+z.toFixed(3),outlier:isOut,direction:v>m?'high':'low'};
+      const robustZ=useRobust?(v-med)/madVal:z;
+      // Flag if caught by IQR OR mean z-score OR robust z-score
+      const isOut=v<lo||v>hi||Math.abs(z)>zThresh||(useRobust&&Math.abs(robustZ)>3.5);
+      return {date:dates[i],value:v,z:+z.toFixed(3),robustZ:+robustZ.toFixed(3),outlier:isOut,direction:v>m?'high':'low'};
     }).filter(x=>x.outlier);
-    return {outliers:out,q1,q3,iqr,lo,hi,mean:m,std:s};
+    return {outliers:out,q1,q3,iqr,lo,hi,mean:m,std:s,mad:madVal,median:med};
   }
 
   function detectGrain(dates) {
@@ -881,10 +897,14 @@ const Stats = (() => {
 
 
   // ── Skewness (moment-based) ───────────────────────────────────────────────
+  // ── Skewness (bias-corrected sample, Type 2 — matches SPSS/SAS) ──────────
   function skewness(a) {
-    const n=a.length, m=mean(a), s=stddevPop(a);
+    const n=a.length;
+    if(n<3) return 0;
+    const m=mean(a), s=stddevPop(a);
     if(s===0) return 0;
-    return a.reduce((sum,v)=>sum+((v-m)/s)**3,0)/n;
+    const g1=a.reduce((sum,v)=>sum+((v-m)/s)**3,0)/n;
+    return g1*Math.sqrt(n*(n-1))/(n-2);
   }
 
   // ── Kurtosis (excess, Fisher definition) ─────────────────────────────────
@@ -1028,7 +1048,48 @@ const Stats = (() => {
     return {issues,warnings,info,colMeta,ok:issues.length===0};
   }
 
-  return {mean,stddev,stddevPop,linReg,pearson,olsMultiple,seasonalIndex,anomalies,periodGrowth,detectGrain,describe,skewness,kurtosis,histogram,cv,vif,timeGaps,isRatioCol,dataQuality,tpval};
+  // ── Median (standalone helper) ────────────────────────────────────────────
+  function median(a) {
+    const s=[...a].sort((x,y)=>x-y);
+    const mid=Math.floor(s.length/2);
+    return s.length%2===0?(s[mid-1]+s[mid])/2:s[mid];
+  }
+
+  // ── MAD (Median Absolute Deviation, scaled to normal equiv) ──────────────
+  function mad(a) {
+    const med=median(a);
+    const devs=a.map(v=>Math.abs(v-med));
+    return median(devs)*1.4826; // scale constant for normal distribution
+  }
+
+  // ── Trimmed mean (default 10% each end) ──────────────────────────────────
+  function trimmedMean(a, p=0.1) {
+    const s=[...a].sort((x,y)=>x-y);
+    const cut=Math.floor(s.length*p);
+    const trimmed=s.slice(cut, s.length-cut);
+    if(!trimmed.length) return mean(a);
+    return trimmed.reduce((s,v)=>s+v,0)/trimmed.length;
+  }
+
+  // ── Lag-1 autocorrelation (persistence/smoothness) ───────────────────────
+  function lag1Autocorr(a) {
+    if(a.length<3) return null;
+    const m=mean(a);
+    const denom=a.reduce((s,v)=>s+(v-m)**2,0);
+    if(denom===0) return null;
+    const numer=a.slice(1).reduce((s,v,i)=>s+(v-m)*(a[i]-m),0);
+    return numer/denom;
+  }
+
+  // ── Winsorize (clip at p-th and (1-p)-th percentile) ─────────────────────
+  function winsorize(a, p=0.05) {
+    const s=[...a].sort((x,y)=>x-y);
+    const lo=s[Math.floor(s.length*p)];
+    const hi=s[Math.floor(s.length*(1-p))];
+    return a.map(v=>Math.min(Math.max(v,lo),hi));
+  }
+
+  return {mean,stddev,stddevPop,median,mad,trimmedMean,lag1Autocorr,winsorize,linReg,pearson,olsMultiple,seasonalIndex,anomalies,periodGrowth,detectGrain,describe,skewness,kurtosis,histogram,cv,vif,timeGaps,isRatioCol,dataQuality,tpval};
 })();
 
 
@@ -1165,7 +1226,7 @@ async function runAnalysis(){
   if(!parsedData||!parsedData.length){alert('Upload a dataset first.');return;}
   show('sec-run');
 
-  const steps=['Validating data quality','Detecting structure & aggregating','Computing trend & regression','Calculating seasonality & distribution','Running correlations','Generating narrative via Claude AI'];
+  const steps=['Validating data quality','Detecting structure & aggregating','Computing trend & regression','Calculating seasonality & distribution','Running correlations'];
   const prog=document.getElementById('prog-list');
   prog.innerHTML=steps.map((s,i)=>`<div class="prog-item" id="pi${i}"><div class="prog-dot"></div>${s}</div>`).join('');
   let si=0;
@@ -1437,6 +1498,20 @@ async function runAnalysis(){
     }
 
     const anom=Stats.anomalies(Y,dates);
+    // Apply winsorization if user requested it
+    if (ctx.winsorize) {
+      const winsorized = Stats.winsorize(Y, 0.05);
+      for (let i = 0; i < Y.length; i++) Y[i] = winsorized[i];
+      // Also winsorize all other metric columns
+      if (window._aggCols) {
+        numCols.forEach(col => {
+          if (col !== metricCol && window._aggCols[col] && window._aggCols[col].length > 0) {
+            const wc = Stats.winsorize(window._aggCols[col], 0.05);
+            for (let i = 0; i < wc.length; i++) window._aggCols[col][i] = wc[i];
+          }
+        });
+      }
+    }
     const compMode = ctx.comp==='auto' ? (grain==='day'?'wow':grain==='week'?'wow':'yoy') : (ctx.comp||'yoy');
     const period_data=dateCol?Stats.periodGrowth(dates,Y,compMode,grain):[];
     const yoy_data=period_data;
@@ -1537,16 +1612,66 @@ async function runAnalysis(){
     };
 
     adv();
-    const narrative=await callClaude(statsPayload);
-    await sleep(300);
 
-    const fullPayload = {stats:statsPayload,narrative,Y,dates,T,trend,si_data,dow_data,pearsonPairs,ols,olsNames,anom,yoy_data,pop_grains,cross_section,channel_breakdown,metricCol,desc,dateCol,grain,compMode,skew,kurt,hist,gaps,allMetricDesc,dqReport};
-    lastRunPayload = fullPayload; 
+    // Render local stats immediately — no API key needed
+    const fullPayload = {stats:statsPayload,narrative:null,Y,dates,T,trend,si_data,dow_data,pearsonPairs,ols,olsNames,anom,yoy_data,pop_grains,cross_section,channel_breakdown,metricCol,desc,dateCol,grain,compMode,skew,kurt,hist,gaps,allMetricDesc,dqReport};
+    lastRunPayload = fullPayload;
     renderResults(fullPayload);
+
+    // Async AI narrative — non-blocking, patches in after render if key is available
+    if (getKey()) {
+      (async () => {
+        // Show loading state in narrative placeholders
+        document.querySelectorAll('[data-ns]').forEach(el => {
+          el.style.opacity = '0.45';
+          el.style.fontStyle = 'italic';
+        });
+        try {
+          const narrative = await callClaude(statsPayload);
+          lastRunPayload.narrative = narrative;
+          patchNarrative(narrative);
+        } catch(e) {
+          document.querySelectorAll('[data-ns]').forEach(el => {
+            el.style.opacity = '0.5';
+            el.style.fontStyle = 'italic';
+            if (!el.textContent.trim()) el.textContent = 'AI narrative unavailable.';
+          });
+        }
+      })();
+    }
 
   } catch(e){
     renderError(e.message||String(e));
   }
+}
+
+function patchNarrative(narrative) {
+  if (!narrative) return;
+  // Headline
+  const hl = document.getElementById('r-headline');
+  if (hl && narrative.headline) hl.textContent = narrative.headline;
+  // Meta tag
+  const meta = document.getElementById('r-meta-ai');
+  if (meta) meta.textContent = 'Local stats + Claude narrative';
+  // Module text patches
+  (narrative.modules || []).forEach(mod => {
+    const plainEl = document.querySelector(`[data-ns="${mod.id}-plain"]`);
+    if (plainEl && mod.plain_english) {
+      plainEl.textContent = mod.plain_english;
+      plainEl.style.opacity = '1';
+      plainEl.style.fontStyle = 'normal';
+    }
+    const actionEl = document.querySelector(`[data-ns="${mod.id}-action"]`);
+    if (actionEl && mod.what_now) {
+      actionEl.textContent = mod.what_now;
+      actionEl.style.opacity = '1';
+      actionEl.style.fontStyle = 'normal';
+    }
+  });
+  // Clear loading state on any remaining placeholders
+  document.querySelectorAll('[data-ns]').forEach(el => {
+    if (el.style.opacity === '0.45') { el.style.opacity = '1'; el.style.fontStyle = 'normal'; }
+  });
 }
 
 async function callClaude(statsPayload){
@@ -1705,8 +1830,10 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
   gaps = gaps ?? [];
   allMetricDesc = allMetricDesc ?? {};
   dqReport = dqReport ?? null;
-  const mods=narrative.modules||[];
+  const mods=narrative?.modules||[];
   const getText=(id,field)=>{const m=mods.find(x=>x.id===id);return m?m[field]||'':'';}
+  const hasNarrative = !!narrative;
+  const aiPlaceholder = getKey() ? '' : 'Add an API key above to generate AI insights for this section.';
 
   const months_en=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const days_en=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -1738,6 +1865,10 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
   const pFmt=p=>{if(p<0.001)return 'p < 0.001';if(p<0.01)return 'p < 0.01';if(p<0.05)return `p = ${p.toFixed(3)}`;return `p = ${p.toFixed(3)}`;};
   const sigClass=p=>p<0.05?'sig-yes':p<0.15?'sig-warn':'sig-no';
 
+  const autocorr = dateCol ? Stats.lag1Autocorr(Y) : null;
+  const autocorrLabel = autocorr == null ? null : autocorr > 0.7 ? 'strongly persistent' : autocorr > 0.4 ? 'moderately persistent' : autocorr > 0.1 ? 'weak persistence' : autocorr < -0.1 ? 'mean-reverting' : 'noisy / random';
+  const autocorrClass = autocorr == null ? 'neu' : autocorr > 0.4 ? 'pos' : autocorr < -0.1 ? 'warn' : 'neu';
+
   await yieldFrame();
   const trendHTML=`
     <div class="mod-card" id="mc-trend">
@@ -1751,11 +1882,12 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
           <div class="stat-c"><div class="stat-lbl">R² (fit)</div><div class="stat-val neu">${(trend.r2*100).toFixed(1)}%</div></div>
           <div class="stat-c"><div class="stat-lbl">Overall mean</div><div class="stat-val neu">${fmt(desc.mean)}</div></div>
           <div class="stat-c"><div class="stat-lbl">Std deviation</div><div class="stat-val neu">${fmt(desc.std)}</div></div>
+          ${autocorr!=null?`<div class="stat-c"><div class="stat-lbl">Persistence (lag-1)</div><div class="stat-val ${autocorrClass}">${autocorr.toFixed(2)} <span style="font-size:9px;font-weight:400">${autocorrLabel}</span></div></div>`:''}
         </div>
-        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('trend','plain_english'))}</div></div>
+        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt" data-ns="trend-plain">${esc(getText('trend','plain_english')||aiPlaceholder)}</div></div>
         <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
-        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('trend','what_now'))}</div></div>
-        <div class="tech-row"><span class="tech-tag">OLS linear regression</span><span class="sig-pill ${sigClass(trend.pval)}">${pFmt(trend.pval)}</span><span class="tech-tag">n=${Y.length} periods</span></div>
+        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt" data-ns="trend-action">${esc(getText('trend','what_now')||aiPlaceholder)}</div></div>
+        <div class="tech-row"><span class="tech-tag">OLS linear regression</span><span class="sig-pill ${sigClass(trend.pval)}">${pFmt(trend.pval)}</span><span class="tech-tag">n=${Y.length} periods</span>${autocorr!=null?`<span class="tech-tag">lag-1 autocorr=${autocorr.toFixed(2)}</span>`:''}</div>
       </div>
     </div>`;
 
@@ -1787,9 +1919,9 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
       </div>
       <div class="mod-body">
         ${seasonStats.length?`<div class="stats-row">${seasonStats.map(s=>`<div class="stat-c"><div class="stat-lbl">${s.label}</div><div class="stat-val ${s.val>1?'pos':s.val<0.95?'neg':'neu'}">${(s.val*100).toFixed(1)}%</div></div>`).join('')}</div>`:''}
-        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('seasonality','plain_english')||'No date column detected — seasonal analysis requires a date column.')}</div></div>
+        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt" data-ns="seasonality-plain">${esc(getText('seasonality','plain_english')||(!dateCol?'No date column detected — seasonal analysis requires a date column.':aiPlaceholder))}</div></div>
         ${seasonDataToRender.length?`<div class="chart-wrap"><canvas id="chart-season"></canvas></div>`:''}
-        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('seasonality','what_now'))}</div></div>
+        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt" data-ns="seasonality-action">${esc(getText('seasonality','what_now')||aiPlaceholder)}</div></div>
         <div class="tech-row"><span class="tech-tag">Ratio-to-mean index</span>${seasonStats.length?`<span class="tech-tag">Peak: ${seasonStats[0].label}</span>`:''}</div>
       </div>
     </div>`;
@@ -1808,7 +1940,7 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
           <div class="stat-c"><div class="stat-lbl">Adj-R²</div><div class="stat-val pos">${(ols.adjR2*100).toFixed(1)}%</div></div>
           <div class="stat-c"><div class="stat-lbl">Top driver</div><div class="stat-val neu">${esc(pearsonPairs[0]?.name||'—')}</div></div>
         </div>`:''}
-        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('correlations','plain_english'))}</div></div>
+        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt" data-ns="correlations-plain">${esc(getText('correlations','plain_english')||aiPlaceholder)}</div></div>
         <div style="margin-bottom:18px">
           ${pearsonPairs?.map(p=>`<div class="driver-row">
             <span class="d-lbl">${esc(p.name)}</span>
@@ -1817,7 +1949,7 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
             <span class="d-sig">${pFmt(p.p)}</span>
           </div>`).join('') || '<span style="font-family:var(--mono);font-size:12px;color:var(--dim)">No numerical predictors found.</span>'}
         </div>
-        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('correlations','what_now'))}</div></div>
+        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt" data-ns="correlations-action">${esc(getText('correlations','what_now')||aiPlaceholder)}</div></div>
         <div class="tech-row"><span class="tech-tag">Pearson correlation</span>${ols?`<span class="tech-tag">Multivariate OLS Regression</span>`:''}${grain==='day' && olsNames?.includes('Tue')?'<span class="tech-tag">Includes DoW Dummies</span>':''}</div>
       </div>
     </div>`;
@@ -1839,7 +1971,7 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
           <div class="stat-c"><div class="stat-lbl">IQR upper</div><div class="stat-val neu">${fmt(anom?.hi||0)}</div></div>
           <div class="stat-c"><div class="stat-lbl">Outliers found</div><div class="stat-val ${anom?.outliers?.length?'warn':'pos'}">${anom?.outliers?.length||0}</div></div>
         </div>
-        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('anomalies','plain_english'))}</div></div>
+        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt" data-ns="anomalies-plain">${esc(getText('anomalies','plain_english')||aiPlaceholder)}</div></div>
         ${recentAnomalies.length?`<div style="margin-bottom:16px">${recentAnomalies.map(o=>`<div class="driver-row">
           <span class="d-lbl">${esc(o.date)}</span>
           <div class="bar-w"><div class="bar-f" style="width:${Math.min(100,Math.abs(o.z)/3*100)}%;background:${o.direction==='high'?'var(--amber)':'var(--red)'}"></div></div>
@@ -1848,7 +1980,7 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
         </div>`).join('')}
         ${anom.outliers.length > 5 ? `<div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-align:center;padding-top:10px">Showing 5 most recent outliers</div>` : ''}
         </div>`:'<div style="font-family:var(--mono);font-size:12px;color:var(--teal);margin-bottom:16px;padding:12px;background:rgba(64,193,141,.06);border-radius:8px">No outliers detected — distribution is consistent.</div>'}
-        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('anomalies','what_now'))}</div></div>
+        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt" data-ns="anomalies-action">${esc(getText('anomalies','what_now')||aiPlaceholder)}</div></div>
         <div class="tech-row"><span class="tech-tag">IQR × 1.5 method</span><span class="tech-tag">z-score threshold: |z| > 2.0</span></div>
       </div>
     </div>`;
@@ -1871,7 +2003,7 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
           <div class="stat-c"><div class="stat-lbl">Best period</div><div class="stat-val pos">${([...yoy_data].sort((a,b)=>b.yoy-a.yoy)[0]?.date||'—')} (+${([...yoy_data].sort((a,b)=>b.yoy-a.yoy)[0]?.yoy??0).toFixed(1)}%)</div></div>
           <div class="stat-c"><div class="stat-lbl">Worst period</div><div class="stat-val neg">${([...yoy_data].sort((a,b)=>a.yoy-b.yoy)[0]?.date||'—')} (${([...yoy_data].sort((a,b)=>a.yoy-b.yoy)[0]?.yoy??0).toFixed(1)}%)</div></div>
         </div>`:``}
-        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt">${esc(getText('yoy','plain_english')||'No comparable periods found — need more data.')}</div></div>
+        <div class="plain-box"><div class="plain-lbl">What the data shows</div><div class="plain-txt" data-ns="yoy-plain">${esc(getText('yoy','plain_english')||'No comparable periods found — need more data.')}</div></div>
         ${recentYoy.length?`<div style="margin-bottom:16px">${recentYoy.map(y=>`<div class="driver-row">
           <span class="d-lbl">${esc(y.date)}</span>
           <div class="bar-w"><div class="bar-f" style="width:${Math.abs(y.yoy)/maxAbsYoy*100}%;background:${y.yoy>0?'#40C18D':'#F8414C'}"></div></div>
@@ -1880,7 +2012,7 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
         </div>`).join('')}
         ${yoy_data.length > 10 ? `<div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-align:center;padding-top:10px">Showing 10 most recent periods</div>` : ''}
         </div>`:''}
-        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(getText('yoy','what_now'))}</div></div>
+        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt" data-ns="yoy-action">${esc(getText('yoy','what_now')||aiPlaceholder)}</div></div>
       </div>
     </div>`;
 
@@ -1993,7 +2125,7 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
           <div class="stat-c"><div class="stat-lbl">Top Channel</div><div class="stat-val ${isConcentrated ? 'warn' : 'pos'}">${esc(topChName)}</div></div>
           <div class="stat-c"><div class="stat-lbl">Share</div><div class="stat-val ${isConcentrated ? 'warn' : 'pos'}">${maxShare}%</div></div>
         </div>
-        <div class="plain-box"><div class="plain-lbl">Channel Insights</div><div class="plain-txt">${esc(chMod.plain_english)}</div></div>
+        <div class="plain-box"><div class="plain-lbl">Channel Insights</div><div class="plain-txt" data-ns="channels-plain">${esc(chMod.plain_english)}</div></div>
         
         ${channel_breakdown.timeline ? `<div class="chart-wrap" style="height:250px; margin-bottom: 24px;"><canvas id="chart-channels"></canvas></div>` : ''}
         
@@ -2011,7 +2143,7 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
             `;
           }).join('')}
         </div>
-        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(chMod.what_now)}</div></div>
+        <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt" data-ns="channels-action">${esc(chMod.what_now)}</div></div>
         <div class="tech-row"><span class="tech-tag">Volume Distribution</span><span class="tech-tag">Overall Vol: ${fmt(channel_breakdown.total_volume)}</span></div>
       </div>
     </div>`;
@@ -2028,7 +2160,7 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
           <div><div class="mod-title">${getDimLabel(channel_breakdown?.dimension_name||'')} Momentum</div><div class="mod-subtitle">Fastest growing vs. steepest declining</div></div>
         </div>
         <div class="mod-body">
-          <div class="plain-box"><div class="plain-lbl">Momentum Insights</div><div class="plain-txt">${esc(chGrowthMod.plain_english)}</div></div>
+          <div class="plain-box"><div class="plain-lbl">Momentum Insights</div><div class="plain-txt" data-ns="channel_growth-plain">${esc(chGrowthMod.plain_english)}</div></div>
           
           <div style="display:flex; gap: 20px; margin-bottom: 24px; flex-wrap: wrap;">
              <div style="flex: 1; min-width: 250px;">
@@ -2052,7 +2184,7 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
              </div>
           </div>
 
-          <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt">${esc(chGrowthMod.what_now)}</div></div>
+          <div class="action-box"><div class="act-lbl">What now?</div><div class="act-txt" data-ns="channel_growth-action">${esc(chGrowthMod.what_now)}</div></div>
           <div class="tech-row"><span class="tech-tag">Period over Period Growth</span><span class="tech-tag">Smoothed calculation</span></div>
         </div>
       </div>`;
@@ -2119,6 +2251,12 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
     </div>`;
   }).join('');
 
+  const madVal = Stats.mad(Y);
+  const trimMean = Stats.trimmedMean(Y, 0.1);
+  const cvPct = desc.std && desc.mean ? (desc.std / Math.abs(desc.mean) * 100) : null;
+  const cvLabel = cvPct == null ? '—' : cvPct > 150 ? 'very high' : cvPct > 100 ? 'high' : cvPct > 50 ? 'moderate' : 'low';
+  const cvClass = cvPct == null ? 'neu' : cvPct > 100 ? 'neg' : cvPct > 50 ? 'warn' : 'pos';
+
   const descHTML=`
     <div class="mod-card">
       <div class="mod-head">
@@ -2132,7 +2270,7 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
         <div class="stats-row">
           <div class="stat-c"><div class="stat-lbl">Mean</div><div class="stat-val neu">${fmt(desc.mean)}</div></div>
           <div class="stat-c"><div class="stat-lbl">Median</div><div class="stat-val neu">${fmt(desc.median)}</div></div>
-          <div class="stat-c"><div class="stat-lbl">Std dev</div><div class="stat-val neu">${fmt(desc.std)}</div></div>
+          <div class="stat-c"><div class="stat-lbl">10% trimmed mean</div><div class="stat-val neu">${fmt(trimMean)}</div></div>
           <div class="stat-c"><div class="stat-lbl">Skewness</div>
             <div class="stat-val ${Math.abs(skew??0)<0.5?'pos':Math.abs(skew??0)>1?'neg':'warn'}" style="font-size:15px">
               ${skew!=null?(skew>0?'+':'')+skew.toFixed(2):'—'}
@@ -2141,10 +2279,10 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
           </div>
         </div>
         <div class="stats-row">
-          <div class="stat-c"><div class="stat-lbl">Min</div><div class="stat-val neu">${fmt(desc.min)}</div></div>
-          <div class="stat-c"><div class="stat-lbl">Q1</div><div class="stat-val neu">${fmt(desc.q1)}</div></div>
-          <div class="stat-c"><div class="stat-lbl">Q3</div><div class="stat-val neu">${fmt(desc.q3)}</div></div>
-          <div class="stat-c"><div class="stat-lbl">Max</div><div class="stat-val neu">${fmt(desc.max)}</div></div>
+          <div class="stat-c"><div class="stat-lbl">Std dev</div><div class="stat-val neu">${fmt(desc.std)}</div></div>
+          <div class="stat-c"><div class="stat-lbl">MAD (robust σ)</div><div class="stat-val neu">${fmt(madVal)}</div></div>
+          <div class="stat-c"><div class="stat-lbl">CV (volatility)</div><div class="stat-val ${cvClass}">${cvPct!=null?cvPct.toFixed(1)+'%':'—'} <span style="font-size:9px;font-weight:400">${cvLabel}</span></div></div>
+          <div class="stat-c"><div class="stat-lbl">Kurtosis</div><div class="stat-val ${Math.abs(kurt??0)<1?'pos':Math.abs(kurt??0)>3?'neg':'warn'}" style="font-size:15px">${kurt!=null?(kurt>0?'+':'')+kurt.toFixed(2):'—'} <span class="dist-shape" style="font-size:9px">${kurtLabel}</span></div></div>
         </div>
         ${Math.abs(desc.mean-desc.median)>desc.std*0.5?`<div style="background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.2);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--text)">
           Mean (${fmt(desc.mean)}) and median (${fmt(desc.median)}) diverge by more than half a std dev — the distribution is skewed. Median is a more reliable central tendency estimate for this data.
@@ -2157,8 +2295,8 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
         <div class="tech-row">
           <span class="tech-tag">Sturges binning</span>
           <span class="tech-tag">n=${desc.n}</span>
-          <span class="tech-tag">CV=${desc.std&&desc.mean?(desc.std/Math.abs(desc.mean)*100).toFixed(1)+'%':'—'}</span>
-          <span class="tech-tag">kurtosis ${kurt!=null?(kurt>0?'+':'')+kurt.toFixed(2):'—'} (${kurtLabel})</span>
+          <span class="tech-tag">bias-corrected skewness (Type 2)</span>
+          <span class="tech-tag">MAD × 1.4826 scaling</span>
         </div>
       </div>
     </div>`;
@@ -2222,11 +2360,11 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
 
   container.innerHTML=`
     <div class="r-header">
-      <div class="r-headline">${esc(narrative.headline||'Analysis complete')}</div>
+      <div class="r-headline" id="r-headline">${esc(narrative?.headline||metricCol+' — '+Y.length+' '+(grain||'')+(Y.length===1?' period':' periods')+' analyzed')}</div>
       <div class="r-meta">
         <span>${esc(metricCol)}</span>
         <span>${Y.length} periods${stats?.date_range?` · ${stats.date_range[0]} – ${stats.date_range[1]}`:''}</span>
-        <span>Local stats + Claude narrative</span>
+        <span id="r-meta-ai">${hasNarrative ? 'Local stats + Claude narrative' : 'Local stats only'}</span>
       </div>
     </div>
     ${dqHTML}${descHTML}${channelsHTML}${channelGrowthHTML}${trendHTML}${seasonHTML}${corrHTML}${anomHTML}${yoyHTML}${popAllGrainsHTML}${crossSectionHTML}`;
