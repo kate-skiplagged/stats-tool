@@ -1107,6 +1107,8 @@ document.getElementById('fi').addEventListener('change',e=>{if(e.target.files[0]
 
 function handleFile(f){Papa.parse(f,{header:true,dynamicTyping:true,skipEmptyLines:true,worker:true,complete:r=>{ingestData(r.data,r.meta.fields,f.name);}});}
 function loadPaste(){const raw=document.getElementById('paste-area').value.trim();if(!raw)return;Papa.parse(raw,{header:true,dynamicTyping:true,skipEmptyLines:true,worker:true,complete:r=>{ingestData(r.data,r.meta.fields,'pasted data');}});}
+function loadDemo(){const csv=`date,sessions,bookings,revenue,avg_fare,conversion_rate\n2024-01-01,3126610,58707,983199,16.74,1.88\n2024-02-01,3132901,60163,1042608,17.33,1.92\n2024-03-01,3498200,71244,1287600,18.07,2.04\n2024-04-01,3621800,74892,1398200,18.67,2.07\n2024-05-01,3912400,82341,1587300,19.28,2.11\n2024-06-01,4103700,89204,1743800,19.55,2.17\n2024-07-01,4487200,98731,1952400,19.78,2.20\n2024-08-01,4312600,91842,1819300,19.81,2.13\n2024-09-01,3876500,79234,1563200,19.73,2.04\n2024-10-01,3654100,73418,1441700,19.63,2.01\n2024-11-01,3421800,67892,1312400,19.33,1.98\n2024-12-01,3698400,76341,1498700,19.63,2.06\n2025-01-01,3289100,61842,1071300,17.32,1.88\n2025-02-01,3341700,63918,1118400,17.50,1.91\n2025-03-01,3712400,74981,1362100,18.17,2.02\n2025-04-01,3834600,79104,1462800,18.49,2.06\n2025-05-01,4098700,86732,1673400,19.29,2.12\n2025-06-01,4287300,93418,1831200,19.60,2.18\n2025-07-01,4601400,102847,2041900,19.85,2.24`;
+Papa.parse(csv,{header:true,dynamicTyping:true,skipEmptyLines:true,complete:r=>{ingestData(r.data,r.meta.fields,'skiplagged_demo_19mo.csv');}});}
 
 function ingestData(rawData,fields,name){
   const data = rawData.filter(row=>{
@@ -2106,8 +2108,8 @@ async function renderResults({stats,narrative,Y,dates,T,trend,si_data,dow_data,p
   await yieldFrame();
   let channelsHTML = '';
   let channelGrowthHTML = '';
-  const chMod = narrative.modules?.find(m => m.id === 'channels');
-  const chGrowthMod = narrative.modules?.find(m => m.id === 'channel_growth');
+  const chMod = narrative?.modules?.find(m => m.id === 'channels');
+  const chGrowthMod = narrative?.modules?.find(m => m.id === 'channel_growth');
   
   if (chMod && channel_breakdown && channel_breakdown.data.length > 0) {
     const maxShare = channel_breakdown.data[0].share_pct;
